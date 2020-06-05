@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 
+__all__ = ["Distribution", "Tree2D", "Proposal", "UniformStepProposal"]
+
 
 # Distributions define the implausibility functions that are used to power IDEMC
 # These hold
@@ -150,10 +152,11 @@ class Tree2D(Distribution):
         p2: float = 0.0
         for m in self.means:
             p2 += multivariate_normal.pdf(x, mean=m, cov=self.covariance)
-        #p = multivariate_normal.pdf(x, mean=self.means[0], cov=self.covariance)
+        # p = multivariate_normal.pdf(x, mean=self.means[0], cov=self.covariance)
         x1 = a[:, 0]
         x2 = a[:, 1]
-        in_box = lambda k: np.all([self.support_limits[i, 0] <= k[i] <= self.support_limits[i, 1] for i, _ in enumerate(k)])
+        in_box = lambda k: np.all(
+            [self.support_limits[i, 0] <= k[i] <= self.support_limits[i, 1] for i, _ in enumerate(k)])
         p = np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.25, 0.25, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.25, 0.75, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.75, 0.25, 0.0))
@@ -225,7 +228,7 @@ class NormalStepProposal(Proposal):
 # Here are a few convenient methods for some pre-set proposals for typical analyses
 
 # Convenience class to construct random walkers
-def make_random_walker(ndims: int, step_size: float, uniform = True):
+def make_random_walker(ndims: int, step_size: float, uniform=True):
     if uniform:
         limits = np.broadcast_to(np.asarray([-step_size, step_size]), (ndims, 2))
         return UniformStepProposal(ndims, limits)
