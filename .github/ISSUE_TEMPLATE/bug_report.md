@@ -25,8 +25,8 @@ If applicable, add screenshots to help explain your problem.
 
 **Environment (please complete the following information):**
  - OS: [e.g. iOS]
- - Python [e.g. 3.7.4]
- - Version [e.g. xEHM 0.0.1]
+ - Python: [e.g. 3.7.4]
+ - Version: [e.g. xEHM 0.0.1]
 
 **Additional context**
 Add any other context about the problem here.
