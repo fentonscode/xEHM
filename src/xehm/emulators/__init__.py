@@ -1,3 +1,4 @@
 # Empty file
 
-# TODO: Link to mogp/gpflow?
+from .emulator import *
+from .gaussian_process import *
