@@ -6,10 +6,10 @@ __all__ = ["Variable"]
 
 
 class Variable:
-    def __init__(self):
-        self.name = ""
-        self.min_support = 0.0
-        self.max_support = 0.0
+    def __init__(self, name="null", minimum=0.0, maximum=1.0):
+        self.name = name
+        self.min_support = minimum
+        self.max_support = maximum
         self._required_keys = ["name", "min", "max"]
 
     def from_dict(self, description: dict):

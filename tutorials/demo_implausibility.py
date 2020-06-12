@@ -9,7 +9,7 @@ import matplotlib.gridspec as grid
 import xehm as hm
 from sklearn.cluster import KMeans
 from typing import Union, List
-from xehm.designs import DefaultDesigner
+from xehm.designs import default_designer
 
 
 class emulator_node:
@@ -38,26 +38,17 @@ def demo_implausibility():
     z_match = 0.5
     z_variance = 0.01
 
-    # We assume that the single input is between 0 and 1
-    x_min = 0.0
-    x_max = 1.0
-
     # Variables to track across the waves
     head_node: emulator_node = emulator_node()
 
-    input_var = hm.Variable()
-    input_var.min_support = 0.0
-    input_var.max_support = 1.0
-    input_var.name = "x"
+    # We assume that the single input is between 0 and 1
+    input_var = hm.Variable("x", 0.0, 1.0)
 
     # Wave 1
     # ------
 
-    d = DefaultDesigner()
-    initial_design = d.design([input_var], 5)
-
     # Pick a random design to start from
-    initial_design = np.random.uniform(low=x_min, high=x_max, size=5).reshape(-1, 1)
+    initial_design = default_designer(input_var, 5)
     initial_runs = simulator(initial_design).reshape(-1, 1)
 
     # Generate an emulator for wave 1
@@ -67,7 +58,7 @@ def demo_implausibility():
     #    print("Wave 1 emulator failed validation")
     #    # What do we do here?
     #    # Try re-drawing the input samples
-    #    initial_design = np.random.uniform(low=x_min, high=x_max, size=5).reshape(-1, 1)
+    #    initial_design = np.random.uniform(low=x_min, high=input_var.max_support, size=5).reshape(-1, 1)
     #    initial_runs = simulator(initial_design).reshape(-1, 1)
     #    head_node.model = hm.emulators.GaussianProcess()
     #    cv = hm.diagnostics._leave_one_out.cross_validate(head_node.model, initial_design, initial_runs)
@@ -77,7 +68,7 @@ def demo_implausibility():
     head_node.model.train(initial_design, initial_runs)
 
     # Sample the support uniformly and calculate implausibility
-    x_test = np.random.uniform(x_min, x_max, 1000).squeeze()
+    x_test = np.random.uniform(input_var.min_support, input_var.max_support, 1000).squeeze()
     x_test.sort()
     y_mean, y_variance = head_node.model.evaluate(x_test)
 
@@ -85,7 +76,7 @@ def demo_implausibility():
     hm_cutoff = [3.0, 1.0] # Aggressive roll-off in wave 2
     impl = implausibility(z_match, np.asarray(y_mean), z_variance, np.asarray(y_variance))
 
-    hm.graphics.plot_1d_nroy(x_min, x_max, x_test.reshape(-1, 1), impl, 100, 3.0)
+    hm.graphics.plot_1d_nroy(input_var.min_support, input_var.max_support, x_test.reshape(-1, 1), impl, 100, 3.0)
 
     non_imp = np.asarray([(x_test[i], i) for i, imp in enumerate(impl) if imp <= hm_cutoff[0]])
     print(f"Wave 1 emulator produced {len(non_imp)} non-implausible samples")
@@ -112,13 +103,13 @@ def demo_implausibility():
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[1, 0])
 
-    ax1 = hm.graphics.plot_emulator_for_wave(ax1, 1, z_match, z_variance, x_min, x_max, [x_test], [y_mean], [y_variance])
+    ax1 = hm.graphics.plot_emulator_for_wave(ax1, 1, z_match, z_variance, input_var.min_support, input_var.max_support, [x_test], [y_mean], [y_variance])
     ax1 = hm.graphics.plot_emulator_design_points(ax1, initial_design, initial_runs)
 
     ax2.plot(x_test, impl)
     ax2.plot(non_imp, impl[index], 'gx')
     ax2.set(xlabel='x', ylabel='I(x)', title='Implausibility')
-    ax2.hlines(y=hm_cutoff[0], xmin=x_min, xmax=x_max, linewidth=1, color='k', linestyle='dashed')
+    ax2.hlines(y=hm_cutoff[0], xmin=input_var.min_support, xmax=input_var.max_support, linewidth=1, color='k', linestyle='dashed')
     ax1.grid(linestyle='--', color='grey', alpha=0.5)
     ax2.grid(linestyle='--', color='grey', alpha=0.5)
     fig.show()
@@ -149,7 +140,7 @@ def demo_implausibility():
         w2_variances.append(y2_var)
 
         # Sample again from top
-        x2_test = np.random.uniform(x_min, x_max, 333).squeeze()
+        x2_test = np.random.uniform(input_var.min_support, input_var.max_support, 333).squeeze()
         x2_test.sort()
         y1_mean, y1_variance = head_node.model.evaluate(x2_test)
         impl = implausibility(z_match, np.asarray(y1_mean), z_variance, np.asarray(y1_variance))
@@ -176,12 +167,12 @@ def demo_implausibility():
         ax2.plot(xplot, impl, 'b')
         ax2.plot(non_imp_2w2, impl[index], 'gx')
 
-    hm.graphics.plot_1d_nroy(x_min, x_max, np.asarray(hm_samples).reshape(-1, 1), np.asarray(hm_impl).reshape(-1, 1), 100, 1.0)
+    hm.graphics.plot_1d_nroy(input_var.min_support, input_var.max_support, np.asarray(hm_samples).reshape(-1, 1), np.asarray(hm_impl).reshape(-1, 1), 100, 1.0)
 
     ax1.set(xlabel='x', ylabel='z', title=f'Emulator output - wave 2')
-    ax1.hlines(y=z_match, xmin=x_min, xmax=x_max, color='k', linestyle='dashed')
+    ax1.hlines(y=z_match, xmin=input_var.min_support, xmax=input_var.max_support, color='k', linestyle='dashed')
     ax2.set(xlabel='x', ylabel='I(x)', title='Implausibility')
-    ax2.hlines(y=hm_cutoff[1], xmin=x_min, xmax=x_max, linewidth=1, color='k', linestyle='dashed')
+    ax2.hlines(y=hm_cutoff[1], xmin=input_var.min_support, xmax=input_var.max_support, linewidth=1, color='k', linestyle='dashed')
     ax1.grid(linestyle='--', color='grey', alpha=0.5)
     ax2.grid(linestyle='--', color='grey', alpha=0.5)
     fig.show()
