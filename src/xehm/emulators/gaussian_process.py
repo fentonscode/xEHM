@@ -2,6 +2,7 @@ import numpy as np
 
 # Shut up TensorFlow and prevent it dominating the output
 import tensorflow as tf
+
 tf.get_logger().setLevel('INFO')
 
 # gpflow will load tensorflow with too much console activity for most users
@@ -10,14 +11,14 @@ from .emulator import Emulator
 
 
 class GaussianProcess(Emulator):
-    def __init__(self):
+    def __init__(self, mean_function=None, kernel=gp.kernels.SquaredExponential()):
         super().__init__()
         self.ident = "Gaussian Process Emulator"
-        self.kernel = gp.kernels.SquaredExponential()
-        self.mean_function = None
+        self.kernel = kernel
+        self.mean_function = mean_function
         self.model = None
 
-    def build(self, inputs, outputs, parameter_defaults=(0.01, 0.1)):
+    def train(self, inputs, outputs, parameter_defaults=(0.01, 0.1)):
         # SE Kernel and regression model
         self.model = gp.models.GPR(mean_function=self.mean_function, kernel=self.kernel,
                                    data=(inputs, outputs))

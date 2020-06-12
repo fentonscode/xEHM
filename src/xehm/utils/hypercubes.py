@@ -1,26 +1,44 @@
 import numpy as np
 
 
-# Draw a uniform sample from an n-dimensional hypercube
-# limits: min/max limits for each variable - Matrix[dims, 2], column 1 = min, column 2 - max
+# Draws uniform samples from an n-dimensional hypercube
+# limits: min/max limits for each variable - [2 x dims] matrix, row 1 = min, row 2 - max
 # NOTE: np.random.uniform adds extra container fluff - squeeze the output
-def uniform_box(limits: np.ndarray) -> np.ndarray:
-    dims: int = limits.shape[0]
-    return np.array([np.random.uniform(low=limits[i, 0], high=limits[i, 1], size=1)
-                     for i in range(dims)]).squeeze()
+def uniform_box(limits: np.ndarray, num_rows=1) -> np.ndarray:
+    dims: int = limits.shape[1]
+    rand = np.random.uniform
+    return np.asarray([rand(low=limits[0, i], high=limits[1, i], size=num_rows)
+                       for i in range(dims)]).transpose().squeeze()
 
 
-# There might be a better way to do this without list comprehension
+# Exploit numpy's operators to check if a collection of points are within limits
 # x should be squeezed to eliminate spurious dimensions
-def point_in_box(x: np.ndarray, box_limits: np.ndarray) -> bool:
-    return np.all([box_limits[i, 0] <= x[i] <= box_limits[i, 1] for i, _ in enumerate(x)])
+# x: [n x dims] test list of points
+# limits: [2 x dims] matrix as columns of min/max for each dimension
+def point_in_box(x: np.ndarray, limits: np.ndarray) -> bool:
+    return not (np.any(x < limits[0, :]) or np.any(x > limits[1, :]))
 
 
 # Generates a hypercube of samples based on the axes and size supplied
 # Axes: List of tuples of (start, stop) pairs - e.g. [(0.0, 1.0), (-1.0, 1.0)]
 # Size: number of samples (same across axes)
+# TODO: This is failing for 1D inputs - do we need a reshape operation in here?
 def hypercube(axes, size):
     ndims = len(axes)
     rev_axes = axes[::-1]
     L = [np.linspace(rev_axes[i][0], rev_axes[i][1], size) for i in range(ndims)]
     return np.flip(np.hstack((np.meshgrid(*L))).swapaxes(0, 1).reshape(ndims, -1).T, axis=1)
+
+
+# Scale matrix columns to a min/max range
+# matrix: [r x c] ndarray
+# scales: min/max limits for each variable - [2 x c] ndarray, row 1 = min, row 2 - max
+def scale_matrix_columns(matrix: np.ndarray, scales: np.ndarray) -> np.ndarray:
+    # Explicitly broadcast to prevent shape errors
+    scale_matrix = np.broadcast_to(np.subtract(scales[0, :], scales[1, :]), matrix.shape)
+    return np.add(np.multiply(matrix, np.subtract(scales[0, :], scales[1, :])), scales[0, :])
+
+
+# Transform a numpy array to [-1, 1]
+def transform_minus_one_to_one(input: np.ndarray) -> np.ndarray:
+    return scale_matrix_columns(input, -1, 1)
