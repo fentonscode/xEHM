@@ -3,12 +3,12 @@ import numpy as np
 
 # Draws uniform samples from an n-dimensional hypercube
 # limits: min/max limits for each variable - [2 x dims] matrix, row 1 = min, row 2 - max
-# NOTE: np.random.uniform adds extra container fluff - squeeze the output
+# NOTE: np.random.uniform adds extra container fluff - don't squeeze or we break 1D uses
 def uniform_box(limits: np.ndarray, num_rows=1) -> np.ndarray:
     dims: int = limits.shape[1]
     rand = np.random.uniform
-    return np.asarray([rand(low=limits[0, i], high=limits[1, i], size=num_rows)
-                       for i in range(dims)]).transpose().squeeze()
+    return np.asarray([rand(low=limits[0, i], high=limits[1, i], size=(num_rows, 1))
+                      for i in range(dims)]).transpose()[0]
 
 
 # Exploit numpy's operators to check if a collection of points are within limits

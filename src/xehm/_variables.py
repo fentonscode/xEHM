@@ -1,5 +1,6 @@
 # Define input / output dimensions
 from .utils.serialisation import contains_required_keys
+from typing import List
 
 __all__ = ["Variable"]
 
@@ -23,3 +24,23 @@ class Variable:
 
     def to_dict(self) -> dict:
         return {"name": self.name, "min": self.min_support, "max": self.max_support}
+
+
+def import_variables_from_file(f_name: str, format_string: str) -> List[Variable]:
+    fmt_dict = \
+        {
+            "csv": import_variables_from_csv,
+            "json": import_variables_from_json
+        }
+
+    if format_string not in fmt_dict:
+        raise ValueError(f"Invalid format specified. Supported formats are {','.join(fmt_dict.keys())}")
+    return fmt_dict[format_string](f_name)
+
+
+def import_variables_from_csv(f_name: str) -> List[Variable]:
+    raise NotImplementedError("TODO")
+
+
+def import_variables_from_json(f_name: str) -> List[Variable]:
+    raise NotImplementedError("TODO")

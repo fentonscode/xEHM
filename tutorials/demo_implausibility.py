@@ -9,6 +9,7 @@ import matplotlib.gridspec as grid
 import xehm as hm
 from sklearn.cluster import KMeans
 from typing import Union, List
+from xehm.designs import DefaultDesigner
 
 
 class emulator_node:
@@ -44,8 +45,16 @@ def demo_implausibility():
     # Variables to track across the waves
     head_node: emulator_node = emulator_node()
 
+    input_var = hm.Variable()
+    input_var.min_support = 0.0
+    input_var.max_support = 1.0
+    input_var.name = "x"
+
     # Wave 1
     # ------
+
+    d = DefaultDesigner()
+    initial_design = d.design([input_var], 5)
 
     # Pick a random design to start from
     initial_design = np.random.uniform(low=x_min, high=x_max, size=5).reshape(-1, 1)

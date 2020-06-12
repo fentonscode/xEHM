@@ -34,16 +34,17 @@ def test_point_in_box():
 # Test uniform_box by creating vectors and checking they are in the right place
 def test_uniform_box():
 
-    # Define a 5D hypercube on [-1, 1] and ensure points are valid
-    num_dims = 5
+    test_dims = [1, 2, 5, 10, 100]
     num_points = 1000
-    limits = np.broadcast_to(np.asarray([[-1.0], [1.0]]), (2, num_dims))
 
-    # Check creating multiple rows
-    cube = hyper.uniform_box(limits, num_points)
-    assert cube.shape[0] == num_points
-    assert cube.shape[1] == num_dims
-    assert hyper.point_in_box(cube, limits)
+    for t in test_dims:
+        limits = np.broadcast_to(np.asarray([[-1.0], [1.0]]), (2, t))
+
+        # Check creating multiple rows
+        cube = hyper.uniform_box(limits, num_points)
+        assert cube.shape[0] == num_points
+        assert cube.shape[1] == t
+        assert hyper.point_in_box(cube, limits)
 
 
 def test_scale_matrix_columns():
