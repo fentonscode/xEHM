@@ -9,7 +9,7 @@ __all__ = ["Distribution", "Tree2D", "Proposal", "UniformStepProposal"]
 #   - Number of dimensions: (int) used throughout samplers
 #   - Support limits: (List[float]) two-column array of low/high limits per dimension (dimension per row)
 #
-# Each base distirbution must define a probabiliy density function that takes a location and parameter list
+# Each base distribution must define a probability density function that takes a location and parameter list
 
 class Distribution:
     def __init__(self, dims: int, limits: np.ndarray = None):
