@@ -9,6 +9,8 @@ tf.get_logger().setLevel('INFO')
 import gpflow as gp
 from .emulator import Emulator
 
+__all__ = ["GaussianProcess"]
+
 
 class GaussianProcess(Emulator):
     def __init__(self, mean_function=None, kernel=gp.kernels.SquaredExponential()):
