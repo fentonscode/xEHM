@@ -3,13 +3,55 @@ import numpy as np
 
 __all__ = ["plot_1d_nroy"]
 
+#
+# NROY Space plotting
+# -------------------
+#
+# NROY Space is an abstract representation of the parameter space defined by finite collections of samples
+# Plotting this space is a transformation from NROY space to plot space, which will need either
+# up or downsampling depending on the resolutions of both spaces
+#
 
-# TODO: Convert to a colour map at some point
+
+def samples_to_plot_space_1d(samples: np.ndarray, plot_resolution):
+    pass
+
+
+def generate_plot_space(nroy_space: np.ndarray, plot_resolution):
+
+    # NROY space is an array with as many dimensions as there are independent inputs
+    # The length of each dimension is the resolution of each axis
+    resolutions = nroy_space.shape
+    plot_space = np.zeros([plot_resolution] * len(resolutions))
+
+
+# implausibility_to_rgb
+#
+# This creates a simple RGB triple based on the implausibility of the current NROY space
+# For best compatibility with publications, the colour mapping is as follows:
+#   - I(x) < 0: Red
+#   - 0 < I(x) < 3: Yellow to Red linear blend
+#   - I(x) > 3: Red
+#
+# TODO: Convert to a matplotlib colour map at some point
+# TODO: Make the cut off and colours parameters?
 def implausibility_to_rgb(imp: float) -> (float, float ,float):
     if imp < 0.0 or imp > 3.0:
         return 1.0, 0.0, 0.0
     else:
         return 1.0, (3.0 - imp) / 3.0, 0.0
+
+
+# wave_to_rgb
+#
+# This creates a simple RGB triple based on the maximum non-implausible wave status of the
+# current NROY space. Usage appears to vary by publication, but the following is proposed:
+#   - 0 < w(x) < W: Black to Blue linear discrete blend
+# Where W is the maximum number of waves, 0 is unexplored space and w(x) is the wave at which
+# the NROY region is ruled out
+#
+def wave_to_rgb(wave: int, max_waves: int) -> (float, float, float):
+    return 0.0, float(wave) / float(max_waves), 0.0
 
 
 def make_colour_map():

@@ -10,6 +10,7 @@ import xehm as hm
 from sklearn.cluster import KMeans
 from typing import Union, List
 from xehm.designs import default_designer
+from xehm.utils import implausibility
 
 
 class emulator_node:
@@ -21,12 +22,6 @@ class emulator_node:
 # Simulator: This is the forward model which is to undergo calibration / analysis
 def simulator(x) -> np.ndarray:
     return np.add(x, np.cos(np.multiply(10.0, x)))
-
-
-# Implausibility: This is the metric by which potential inputs are ranked
-def implausibility(match: float, expectation: np.ndarray, variance: float,
-                   emulator_variance: np.ndarray) -> np.ndarray:
-    return np.divide(np.abs(np.subtract(match, expectation)), np.sqrt(np.add(variance, emulator_variance)))
 
 
 # Main demo starts here
@@ -49,7 +44,7 @@ def demo_implausibility():
 
     # Pick a random design to start from
     initial_design = default_designer(input_var, 5)
-    initial_runs = simulator(initial_design).reshape(-1, 1)
+    initial_runs = simulator(initial_design)
 
     # Generate an emulator for wave 1
     head_node.model = hm.emulators.GaussianProcess()

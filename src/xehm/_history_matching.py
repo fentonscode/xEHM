@@ -20,6 +20,8 @@ class HistoryMatching:
         self.n_dimensions = 0
         self.out_samples: Union[np.ndarray, None] = None
         self.simulator = None
+        self.current_samples: List[np.ndarray] = []
+        self.complete_waves = 0
 
     def load(self, f_name: str):
         pass
@@ -47,6 +49,30 @@ class HistoryMatching:
         self.current_wave = 0
         self.out_samples = None
 
+    def run_next(self):
+
+        #
+        # Run the next wave
+        #
+        # 1) Inspect the surviving samples and use them to train emulators
+        # 2) Use diagnostics to check these emulators are behaving
+        # 3) Generate more samples
+        # 4) Throw each sample through the emulator gauntlet
+        # 5) Plot surviving samples NROY space
+        #
+
+        current_samples = self.current_samples[-1]
+        current_cluster_count = len(self.space_indices[-1])
+        self.complete_waves += 1
+
+    def run_wave_i(self, w_index: int):
+        if w_index == 0:
+            # Setup code here
+            pass
+        if w_index > self.complete_waves:
+            runs = w_index - self.complete_waves
+
+
     def run(self, n_design_points):
 
         # The first stage of history matching is a bit special, it requires an explicit design
@@ -59,3 +85,6 @@ class HistoryMatching:
 
             initial_design_points = uniform_box(np.asarray([[mins], [maxs]]), n_design_points)
             initial_design_outputs = self.simulator(initial_design_points)
+
+            # Samples
+            wave_samples = uniform_box(np.asarray([[mins], [maxs]]), 1000)

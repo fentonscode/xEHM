@@ -18,16 +18,14 @@ class XMeans(Classifier):
 
     def assign(self, data: np.ndarray, parameters: Tuple = None):
 
-        x = data.reshape(-1, 1)
-
         # Cluster to branch the emulators
         iter_limit = 100
         b_trace = []
         k = 1
         while k < iter_limit:
-            clusters = KMeans(n_clusters=k).fit(x)
-            chunks = np.asarray([data[np.where(clusters.labels_ == i)] for i in range(k)])
-            bic = _bic(chunks, np.asarray(clusters.cluster_centers_).reshape(-1, 1))
+            clusters = KMeans(n_clusters=k).fit(data)
+            chunks = [data[np.where(clusters.labels_ == i)] for i in range(k)]
+            bic = _bic(chunks, clusters.cluster_centers_)
             b_trace.append(bic)
             if k == 1:
                 prev_bic = bic
@@ -77,7 +75,10 @@ class XMeans(Classifier):
 #
 def _bic(clusters, centroids):
     num_points = sum(len(cluster) for cluster in clusters)
-    num_dims = clusters[0][0].shape[0]
+
+    # Numpy completely butchers 1D arrays/slices
+    num_dims = clusters[0].shape[1] if clusters[0].ndim > 1 else 1
+
     log_likelihood = _loglikelihood(num_points, num_dims, clusters, centroids)
     num_params = _free_params(len(clusters), num_dims)
     return -(log_likelihood - num_params / 2.0 * np.log(num_points))
@@ -109,7 +110,7 @@ def _loglikelihood(num_points, num_dims, clusters, centroids):
 #
 def _cluster_variance(num_points, clusters, centroids) -> float:
     s: float = 0
-    num_dims: int = clusters[0][0].shape[0]
+    num_dims = clusters[0].shape[1] if clusters[0].ndim > 1 else 1
     denom: float = float(num_points - len(centroids)) * num_dims
     for cluster, centroid in zip(clusters, centroids):
         distances = euclidean_distances(cluster, centroid.reshape(-1, 1))

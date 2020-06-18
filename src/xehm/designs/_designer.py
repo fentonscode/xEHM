@@ -13,5 +13,14 @@ class Designer:
         if type(self) is Designer:
             raise Exception("Emulator is an abstract base, inherit and define your own")
 
-    def design(self, v_list: List[Variable], n_points: int):
-        raise NotImplementedError("Custom designers must provide a design method")
+    #
+    # propose: Generates n samples mapped from a list of input variables
+    #
+    def propose(self, v_list: List[Variable], n_points: int):
+        raise NotImplementedError("Custom designers must provide a propose method")
+
+    #
+    # select: Choose n samples from a given set
+    #
+    def select(self, s_list, n_points: int):
+        raise NotImplementedError("Custom designers must provide a select method")
