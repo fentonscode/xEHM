@@ -1,11 +1,4 @@
 import numpy as np
-
-# Shut up TensorFlow and prevent it dominating the output
-import tensorflow as tf
-
-tf.get_logger().setLevel('INFO')
-
-# gpflow will load tensorflow with too much console activity for most users
 import gpflow as gp
 from .emulator import Emulator
 
@@ -32,6 +25,9 @@ class GaussianProcess(Emulator):
         opt = gp.optimizers.Scipy()
         opt_logs = opt.minimize(self.model.training_loss, self.model.trainable_variables,
                                 options=dict(maxiter=100))
+
+        self._design_inputs = inputs
+        self._design_outputs = outputs
         return self
 
     def evaluate(self, points):

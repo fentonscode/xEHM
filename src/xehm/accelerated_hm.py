@@ -13,14 +13,13 @@
 from .space_descriptor import RegionOneDimensional
 from .clustering import XMeans
 from .emulators import GaussianProcess
-from .designs import default_designer
-from .diagnostics import cross_validate
+from .designs import default_designer, default_selector
+from .diagnostics import LeaveOneOut
 from .graphics import plot_1d_nroy, plot_emulator_for_wave, plot_emulator_design_points
 from .graphics import HGraph
 from ._sample import SISOSampleSet
 from ._variables import Variable
 from .utils import implausibility
-from operator import itemgetter
 from typing import Union, List
 from sklearn.cluster import KMeans
 import numpy as np
@@ -46,9 +45,6 @@ class HistoryMatching1D():
         self._sim_function = None
         self._num_waves = 0
         self._emulators = []
-        self._out_samples: Union[np.ndarray, None] = None
-        self._out_emulation: Union[np.ndarray, None] = None
-        self._out_imp: Union[np.ndarray, None] = None
         self._current_samples: Union[SISOSampleSet, None] = None
         self._emulator_budget = 100
         self._simulator_budget = 10
@@ -58,6 +54,10 @@ class HistoryMatching1D():
         # Analysis components
         self._emulator_model = emulator_model
         self._designer = default_designer
+        self._diagnostic = LeaveOneOut.cross_validate
+
+        # Outputs / data for plotting
+        self._samples = None
 
     def set_simulator(self, simulator):
         self._sim_function = simulator
@@ -75,7 +75,7 @@ class HistoryMatching1D():
     # Notes:
     #   - If the simulator has not been defined / attached then this will fail
     #
-    def initialise(self, n_points: Union[int, None] = None, i_cut_off: Union[float, None] = 3.0):
+    def initialise(self, n_points: Union[int, None] = None):
 
         # If n_points is specified then update the simulator budget
         if n_points is not None:
@@ -83,13 +83,13 @@ class HistoryMatching1D():
         if self._sim_function is None:
             raise ValueError("No simulator defined for this history matching process")
 
-        # Create the initial design points
+        # Create the initial design points using the simulator
         initial_design = self._designer(self._variable, self._simulator_budget)
         initial_runs = self._sim_function(initial_design)
 
         # Build and validate the emulator
         emulator = self._emulator_model()
-        valid = cross_validate(emulator, initial_design, initial_runs)
+        valid = self._diagnostic(emulator, initial_design, initial_runs)
         if not valid:
             print(f"Emulation failed in initial wave")
             # What do we do here?
@@ -97,34 +97,33 @@ class HistoryMatching1D():
         print("Constructed initial emulator")
 
         # Generate emulation samples
-        next_samples = self._designer(self._variable, self._emulator_budget)
-        next_outputs = emulator.evaluate(next_samples)
-        impl = implausibility(self._target_mean, next_outputs[0], self._target_variance, next_outputs[1])
+        emulator_x = self._designer(self._variable, self._emulator_budget)
+        means, variances = emulator.evaluate(emulator_x)
+        emulator_i = implausibility(self._target_mean, means, self._target_variance, variances)
 
         # Don't select out final samples to allow full space plotting
-        self._out_samples = next_samples
-        self._out_emulation = next_outputs
-        self._out_imp = impl
+        self._samples = np.zeros((self._emulator_budget, 4))
+        self._samples[:, 0] = emulator_x[:, 0]
+        self._samples[:, 1] = means[:, 0]
+        self._samples[:, 2] = variances[:, 0]
+        self._samples[:, 3] = emulator_i[:, 0]
         self._emulators.append(emulator)
-        self.sim_design_points = initial_design
-        self.sim_runs = initial_runs
-
-        self._current_samples = SISOSampleSet(self._emulator_budget)
-        self._current_samples._data[:, 0] = next_samples
-        self._current_samples._data[:, 1] = next_outputs
-        self._current_samples._data[:, 2] = impl
 
     def run_wave(self, i_cut_off=3.0):
 
-        # Check the implausibiity space and filter out 'good' samples
-        cuts = np.asarray([(self._out_samples[i], imp) for i, imp in enumerate(self._out_imp) if imp <= i_cut_off])
-        self._out_samples = cuts[:, 0]
-        self._out_imp = cuts[:, 1]
+        # Check the implausibility space and filter out 'good' samples
+        self._samples = self._samples[self._samples[:, 3] <= i_cut_off]
+
+        # Numpy ruins 1D slices, so weld the dimension back on
+        locations = self._samples[:, 0].reshape(-1, 1)
 
         # Each wave starts by inspecting the current available samples and discovering structure
-        cl = XMeans().assign(self._out_samples, None)
+        # np.newaxis stops numpy chopping off the dimensions
+        cl = XMeans().assign(locations, None)
         print(f"Recommending {len(cl)} clusters")
-        clusters = KMeans(n_clusters=cl.n_groups).fit(self._out_samples)
+
+        # TODO: Do we need to call KMeans again??
+        clusters = KMeans(n_clusters=cl.n_groups).fit(locations)
 
         # Split space using cluster centres
         splits = []
@@ -139,10 +138,10 @@ class HistoryMatching1D():
 
         # Build emulators for each cluster
         for c in range(cl.n_groups):
-            cl_samples = self._out_samples[clusters.labels_ == c]
+            cl_samples = default_selector(locations[clusters.labels_ == c], self._simulator_budget)
             cl_runs = self._sim_function(cl_samples)
             emulator = self._emulator_model()
-            valid = cross_validate(emulator, cl_samples, cl_runs)
+            valid = self._diagnostic(emulator, cl_samples, cl_runs)
             if not valid:
                 print(f"Emulation failed in wave {self._num_waves + 1}")
                 # What do we do here?

@@ -54,14 +54,14 @@ class SampleSet:
 # Single input, single output set for 1d history matching
 class SISOSampleSet:
     def __init__(self, n_points):
-        self._data = np.zeros((n_points, 3))
+        self._data = np.zeros((n_points, 4))
 
     def __getitem__(self, item):
         return self._data[item]
 
     def __setitem__(self, key, value):
         if isinstance(value, tuple):
-            self.write_components(key, value[0], value[1], value[2])
+            self.write_components(key, value[0], value[1], value[2], value[3])
         else:
             self.write_sample(key, value)
 
@@ -69,15 +69,16 @@ class SISOSampleSet:
         return self._data.shape[0]
 
     def resize(self, n_points):
-        self._data = np.zeros((n_points, 3))
+        self._data = np.zeros((n_points, 4))
 
     def write_sample(self, index, value):
         self._data[index] = value
 
     def write_components(self, index, location, emulation, implausibility):
         self._data[index, 0] = location
-        self._data[index, 1] = emulation
-        self._data[index, 2] = implausibility
+        self._data[index, 1] = emulation[0]
+        self._data[index, 2] = emulation[1]
+        self._data[index, 3] = implausibility
 
     def sort_by_location(self):
         self._data = self._data[self._data[:, 0].argsort()]
