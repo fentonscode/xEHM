@@ -10,6 +10,7 @@ class Emulator:
             raise Exception("Emulator is an abstract base, inherit and define your own")
         self._design_inputs = []
         self._design_outputs = []
+        self.ident = "Abstract emulator"
 
     def train(self, inputs, outputs, parameter_defaults=None):
         raise NotImplementedError("Custom emulators must define a build function")
