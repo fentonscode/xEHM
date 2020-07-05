@@ -7,7 +7,9 @@
 #
 # In 1D history matching is likely extremely inefficient compared to other methods, but is valid
 # Regions and space splits in 1D are analytically trivial, so cascading samples through the entire
-# emulator hierarchy can be avoided for a simpler and faster implementation
+# emulator hierarchy can be avoided for a simpler and faster implementation.
+#
+# 1D Cases should use some kind of root finding algorithm - False position is probably the best
 #
 
 from .space_descriptor import RegionOneDimensional
@@ -45,10 +47,13 @@ class HistoryMatching1D():
         self._target_mean = z_mean
         self._target_variance = z_variance
         self._space = RegionOneDimensional(self._variable.min_support, self._variable.max_support)
-        self._num_waves = 0
+        self._num_waves = -1
 
         # Wave-space description
         self._emulators: List[Emulator] = []
+        self._levels: List[int] = []
+        self._clusters = []
+
         self._splits: List[List[float]] = []
         self._current_samples: Union[SISOSampleSet, None] = None
 
@@ -113,6 +118,7 @@ class HistoryMatching1D():
             # What do we do here?
         emulator.train(initial_design, initial_runs)
         print("Emulator has passed diagnostics")
+        emulator.ident = "wave0_em0"
 
         # Generate emulation samples
         emulator_x = self._designer(self._variable, self._emulator_budget)
@@ -121,19 +127,22 @@ class HistoryMatching1D():
         print(f"Constructed implausibility set containing {self._emulator_budget} points")
 
         # Don't select out final samples to allow full space plotting
-        self._samples = np.zeros((self._emulator_budget, 4))
+        self._samples = np.zeros((self._emulator_budget, 5))
         self._samples[:, 0] = emulator_x[:, 0]
         self._samples[:, 1] = means[:, 0]
         self._samples[:, 2] = variances[:, 0]
         self._samples[:, 3] = emulator_i[:, 0]
-        self._emulators.append(emulator)
+        self._samples[:, 4] = np.zeros(self._emulator_budget)
+        self._emulators = [emulator]
+        self._levels = [0]
         self._splits = []
+        self._clusters = [None]
         self._num_waves = 0
 
     def run_wave(self, i_cut_off=3.0):
 
         # Check for calling before initialisation
-        if self._num_waves < 1:
+        if self._num_waves < 0:
             print("WARNING: run_wave() called with no initialisation")
             print("Using defaults to initialise the run")
             self.initialise()
@@ -151,12 +160,13 @@ class HistoryMatching1D():
         # Each wave starts by inspecting the current available samples and discovering structure
         # np.newaxis stops numpy chopping off the dimensions
         cl = XMeans().assign(locations, None)
-        print(f"Assigning points to space: recommending {len(cl)} clusters")
+        print(f"Assigning points to space: recommending {cl.n_groups} clusters")
 
         # TODO: Do we need to call KMeans again??
         clusters = KMeans(n_clusters=cl.n_groups).fit(locations)
         for i, c in enumerate(clusters.cluster_centers_):
-            print(f"Cluster {i} centroid: {c}")
+            print(f"Cluster {i + 1} centroid: {c[0]}")
+        self._clusters.append(clusters)
 
         # Split space using cluster centres
         splits = []
@@ -170,12 +180,16 @@ class HistoryMatching1D():
             self._space.split_location(float(split))
         new_outs = []
         new_ems = []
+        new_vars = []
         new_imps = []
+        new_ids = []
+
+        last_emulator_id = len(self._emulators)
 
         # Build emulators for each cluster
         for c in range(cl.n_groups):
             print_separator_line()
-            print(f"Constructing emulator for cluster {c}")
+            print(f"Constructing emulator for cluster {c + 1}")
             samples_in_region = locations[clusters.labels_ == c]
             print(f"Found {samples_in_region.shape[0]} out of {locations.shape[0]} in this region")
             cl_samples = default_selector(locations[clusters.labels_ == c], self._simulator_budget)
@@ -190,49 +204,137 @@ class HistoryMatching1D():
                 # What do we do here?
             emulator.train(cl_samples, cl_runs)
             print("Emulator has passed diagnostics")
+            emulator.ident = f"wave{self._num_waves}_em{c}"
 
             # Because we are in 1D, we can isolate this region and resample locally
-            subspace = self._space.sample_to_region_limits(clusters.cluster_centers_[c])
-            v = Variable(f"emulated_x_w{self._num_waves + 1}_c{c}", subspace[0], subspace[1])
-            next_samples = default_designer(v, self._emulator_budget)
+            #subspace = self._space.sample_to_region_limits(clusters.cluster_centers_[c])
+            #v = Variable(f"emulated_x_w{self._num_waves + 1}_c{c}", subspace[0], subspace[1])
+            #next_samples = default_designer(v, self._emulator_budget)
+            #print(f"Sampled {self._emulator_budget} samples from [{subspace[0]}, {subspace[1]}]")
 
-            # Reject implausible samples
-            next_outputs = emulator.evaluate(next_samples)
-            impl = implausibility(self._target_mean, next_outputs[0], self._target_variance, next_outputs[1])
 
-            new_outs.extend(next_samples)
-            new_ems.extend(next_outputs)
-            new_imps.extend(impl)
+            # Store the new emulator and depth
             self._emulators.append(emulator)
+            self._levels.append(self._num_waves)
 
-        self._out_samples = np.asarray(new_outs)
-        self._out_emulation = np.asarray(new_ems)
-        self._out_imp = np.asarray(new_imps)
+        ## PREVIOUS INDENT
+        # Generate new samples for the next iteration
+        next_samples = self.cascade_rejection_sampler(self._emulator_budget)
 
-    def plot_current(self):
+        # Calculate implausibility
+        next_outputs, next_vars = emulator.evaluate(next_samples)
+        impl = implausibility(self._target_mean, next_outputs, self._target_variance, next_vars)
+        ids = [last_emulator_id + c] * self._emulator_budget
+
+        new_outs.extend(next_samples)
+        new_ems.extend(next_outputs)
+        new_vars.extend(next_vars)
+        new_imps.extend(impl)
+        new_ids.extend(ids)
+        ##
+
+        new_outs = np.asarray(new_outs).reshape(-1, 1)
+        new_ems = np.asarray(new_ems).reshape(-1, 1)
+        new_vars = np.asarray(new_vars).reshape(-1, 1)
+        new_imps = np.asarray(new_imps).reshape(-1, 1)
+
+        self._samples = np.zeros((self._emulator_budget * cl.n_groups, 5))
+        self._samples[:, 0] = new_outs[:, 0]
+        self._samples[:, 1] = new_ems[:, 0]
+        self._samples[:, 2] = new_vars[:, 0]
+        self._samples[:, 3] = new_imps[:, 0]
+        self._samples[:, 4] = np.asarray(new_ids).reshape(-1,)
+
+
+    # Cascade rejection sampling is the standard method for history matching
+    # We generate samples at the highest level and test against each emulation wave - samples are rejected
+    # if they do not belong to the non-implausible set
+    def cascade_rejection_sampler(self, budget: int):
+
+        # Resample from initial setup
+        samples = np.zeros((budget, 5))
+        samples[:, 0] = self._designer(self._variable, budget).squeeze()
+        m, v = self._emulators[0].evaluate(samples[:, 0])
+        samples[:, 1] = m.squeeze()
+        samples[:, 2] = v.squeeze()
+        samples[:, 3] = implausibility(self._target_mean, m, self._target_variance, v).squeeze()
+        samples[:, 4] = np.zeros(budget)
+
+        # Filter from wave 0
+        non_imp = samples[samples[:, 3] <= 3.0]
+        x = non_imp[:, 0].reshape(-1, 1)
+
+        base = 1
+        for wave in range(1, self._num_waves + 1):
+
+            x_new = []
+            # Calculate the cluster labels for each sample at this wave level
+            ids = self._clusters[wave].predict(x)
+            num_groups = len(self._clusters[wave].cluster_centers_)
+            for g in range(num_groups):
+                filtered_by_cluster = x[ids == g, 0].reshape(-1, 1)
+                model = self._emulators[g + base]
+                print(f"Cascading through: {model.ident}")
+                m, v = model.evaluate(filtered_by_cluster)
+                i = implausibility(self._target_mean, m, self._target_variance, v)
+                accepted = filtered_by_cluster[i <= 3.0]
+                x_new.extend(accepted)
+            base += num_groups
+            x = np.asarray(x_new).reshape(-1, 1)
+
+        return x
+
+
+    def plot_current(self, resolution: Union[int, None]=None, i_cut_off=3.0):
         if self._samples is None:
             print("Nothing to plot")
             return
-        plot_1d_nroy(self._variable.min_support, self._variable.max_support, self._out_samples, self._out_imp, 100, 3.0)
+
+        s_count: int = int(self._emulator_budget / 10.0)
+        if resolution is not None:
+            s_count = resolution
+
+        locs = self._samples[:, 0]
+        imps = self._samples[:, 3]
+        plot_1d_nroy(self._variable.min_support, self._variable.max_support, locs, imps, s_count, i_cut_off)
 
     def plot_emulators(self):
+
+        if self._num_waves < 0:
+            raise ValueError("No emulators to plot!")
 
         graph = HGraph()
         graph.set_dimensions(2, 1)
 
-        x_, y_, i_ = (np.asarray(t).reshape(-1, 1)
-                      for t in zip(*sorted(zip(self._out_samples, self._out_emulation, self._out_imp))))
+        # Samples array is: x, m, v, i as columns, sort on x as they are random draws
+        plot_source = self._samples[self._samples[:, 0].argsort()]
 
-        graph.axes[0] = plot_emulator_for_wave(graph.axes[0], 1, self._target_mean, self._target_variance,
-                                               self._variable.min_support, self._variable.max_support,
-                                               [x_], [y_[0]], [y_[1]])
-        graph.axes[0] = plot_emulator_design_points(graph.axes[0], self.sim_design_points, self.sim_runs)
+        num_emulators = 1 if self._num_waves == 0 else len(self._splits[-1]) + 1
+        for n in range(num_emulators):
 
-        # Implausibility trace
-        graph.axes[1].scatter(x_, i_, 'b+')
-        graph.axes[1].set(xlabel='x', ylabel='I(x)', title='Implausibility')
-        graph.axes[1].hlines(y=3.0, xmin=self._variable.min_support, xmax=self._variable.max_support,
-                             linewidth=1, color='k', linestyle='dashed')
-        graph.axes[0].grid(linestyle='--', color='grey', alpha=0.5)
-        graph.axes[1].grid(linestyle='--', color='grey', alpha=0.5)
+            index = len(self._emulators) - 1 - n
+
+            emulator_design_inputs = self._emulators[index]._design_inputs
+            emulator_design_outputs = self._emulators[index]._design_outputs
+
+            mask = plot_source[:, 4] == index
+            x_ = plot_source[mask, 0]
+            m_ = plot_source[mask, 1]
+            v_ = plot_source[mask, 2]
+            i_ = plot_source[mask, 3]
+
+            graph.axes[0] = plot_emulator_for_wave(graph.axes[0], self._num_waves, self._target_mean, self._target_variance,
+                                                   self._variable.min_support, self._variable.max_support,
+                                                   [x_], [m_], [v_])
+
+            # Add the training data to the plot
+            graph.axes[0] = plot_emulator_design_points(graph.axes[0], emulator_design_inputs, emulator_design_outputs)
+
+            # Implausibility trace
+            graph.axes[1].scatter(x_, i_, c="b", marker='+')
+            graph.axes[1].set(xlabel='x', ylabel='I(x)', title='Implausibility')
+            graph.axes[1].hlines(y=3.0, xmin=self._variable.min_support, xmax=self._variable.max_support,
+                                 linewidth=1, color='k', linestyle='dashed')
+            graph.axes[0].grid(linestyle='--', color='grey', alpha=0.5)
+            graph.axes[1].grid(linestyle='--', color='grey', alpha=0.5)
         graph.plot()

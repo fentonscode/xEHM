@@ -13,7 +13,7 @@ class GaussianProcess(Emulator):
         self.mean_function = mean_function
         self.model = None
 
-    def train(self, inputs, outputs, parameter_defaults=(0.01, 0.1)):
+    def train(self, inputs: np.ndarray, outputs: np.ndarray, parameter_defaults=(0.01, 0.1)):
         # SE Kernel and regression model
         self.model = gp.models.GPR(mean_function=self.mean_function, kernel=self.kernel,
                                    data=(inputs, outputs))
@@ -33,3 +33,14 @@ class GaussianProcess(Emulator):
     def evaluate(self, points):
         mean, var = self.model.predict_f(points.reshape(-1, 1))
         return np.asarray(mean), np.asarray(var)
+
+    # Unused for now
+    def validate(self, inputs: np.ndarray, outputs: np.ndarray, diag):
+        print(f"Constructed an emulator of type {self.ident}")
+        valid = diag(self, inputs, outputs)
+        if not valid:
+            print(f"Emulator failed diagnostics in initial wave")
+            # What do we do here?
+        self.train(inputs, outputs)
+        print("Emulator has passed diagnostics")
+

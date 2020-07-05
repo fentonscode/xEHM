@@ -14,11 +14,11 @@ def plot_emulator_design_points(axes, x, y):
 
 # Plot a SISO emulator trace, all numerical inputs are column vectors
 def plot_emulator_single_output(axes, x: np.ndarray, mean: np.ndarray, variance: np.ndarray):
-    delta = 2.0 * np.sqrt(variance[:, 0])
-    upper = mean[:, 0] + delta
-    lower = mean[:, 0] - delta
-    axes.plot(x[:, 0], mean[:, 0], color='b')
-    axes.fill_between(x[:, 0], lower, upper, color="C0", alpha=0.2)
+    delta = 2.0 * np.sqrt(variance)
+    upper = mean + delta
+    lower = mean - delta
+    axes.plot(x, mean, color='b')
+    axes.fill_between(x, lower, upper, color="C0", alpha=0.2)
     return axes
 
 

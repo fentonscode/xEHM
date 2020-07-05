@@ -16,12 +16,22 @@ def main():
 
     hmatch = hm.HistoryMatching1D(min_x, max_x, z_mean, z_variance)
     hmatch.set_simulator(simulator)
-    hmatch.initialise(5)
-    hmatch.plot_current()
+    hmatch.set_budgets(5, 100)
+
+    hmatch.initialise()
+    hmatch.plot_current(resolution=20)
     hmatch.plot_emulators()
 
     hmatch.run_wave()
-    hmatch.plot_current()
+    hmatch.plot_current(resolution=20)
+    hmatch.plot_emulators()
+
+    hmatch.cascade_rejection_sampler(100)
+
+    hmatch.run_wave()
+    hmatch.plot_current(resolution=20)
+    hmatch.plot_emulators()
+
     hmatch.run_wave()
 
     pass

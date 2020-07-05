@@ -19,7 +19,7 @@ class XMeans(Classifier):
     def assign(self, data: np.ndarray, parameters: Tuple = None):
 
         # Cluster to branch the emulators
-        iter_limit = 100
+        iter_limit = data.shape[0]
         b_trace = []
         k = 1
         while k < iter_limit:
