@@ -105,8 +105,8 @@ def plot_1d_nroy(min_x: float, max_x: float, x_locs: np.ndarray, implausibility:
         chunks.append(chunk_def)
 
     for x, i in zip(x_locs, implausibility):
-        chunk_loc = int(((x[0] - min_x) / x_range) * resolution)
-        chunks[chunk_loc].average(i[0])
+        chunk_loc = int(((x - min_x) / x_range) * resolution)
+        chunks[chunk_loc].average(i)
 
     graph = vertical_split_percent(0.1)
     non_imp = x_locs[implausibility <= cut_off]
