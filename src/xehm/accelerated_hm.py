@@ -178,13 +178,6 @@ class HistoryMatching1D():
         for split in splits:
             print(f"Split space at {split}")
             self._space.split_location(float(split))
-        new_outs = []
-        new_ems = []
-        new_vars = []
-        new_imps = []
-        new_ids = []
-
-        last_emulator_id = len(self._emulators)
 
         # Build emulators for each cluster
         for c in range(cl.n_groups):
@@ -212,38 +205,20 @@ class HistoryMatching1D():
             #next_samples = default_designer(v, self._emulator_budget)
             #print(f"Sampled {self._emulator_budget} samples from [{subspace[0]}, {subspace[1]}]")
 
-
             # Store the new emulator and depth
             self._emulators.append(emulator)
             self._levels.append(self._num_waves)
 
         ## PREVIOUS INDENT
         # Generate new samples for the next iteration
-        next_samples = self.cascade_rejection_sampler(self._emulator_budget)
+        x, m, v, i, c = self.cascade_rejection_sampler(self._emulator_budget)
 
-        # Calculate implausibility
-        next_outputs, next_vars = emulator.evaluate(next_samples)
-        impl = implausibility(self._target_mean, next_outputs, self._target_variance, next_vars)
-        ids = [last_emulator_id + c] * self._emulator_budget
-
-        new_outs.extend(next_samples)
-        new_ems.extend(next_outputs)
-        new_vars.extend(next_vars)
-        new_imps.extend(impl)
-        new_ids.extend(ids)
-        ##
-
-        new_outs = np.asarray(new_outs).reshape(-1, 1)
-        new_ems = np.asarray(new_ems).reshape(-1, 1)
-        new_vars = np.asarray(new_vars).reshape(-1, 1)
-        new_imps = np.asarray(new_imps).reshape(-1, 1)
-
-        self._samples = np.zeros((self._emulator_budget * cl.n_groups, 5))
-        self._samples[:, 0] = new_outs[:, 0]
-        self._samples[:, 1] = new_ems[:, 0]
-        self._samples[:, 2] = new_vars[:, 0]
-        self._samples[:, 3] = new_imps[:, 0]
-        self._samples[:, 4] = np.asarray(new_ids).reshape(-1,)
+        self._samples = np.zeros((x.shape[0], 5))
+        self._samples[:, 0] = x.squeeze()
+        self._samples[:, 1] = m.squeeze()
+        self._samples[:, 2] = v.squeeze()
+        self._samples[:, 3] = i.squeeze()
+        self._samples[:, 4] = c.squeeze()
 
 
     # Cascade rejection sampling is the standard method for history matching
@@ -251,38 +226,53 @@ class HistoryMatching1D():
     # if they do not belong to the non-implausible set
     def cascade_rejection_sampler(self, budget: int):
 
+        if not self._emulators:
+            raise ValueError("History matching not initialised")
+
         # Resample from initial setup
-        samples = np.zeros((budget, 5))
-        samples[:, 0] = self._designer(self._variable, budget).squeeze()
-        m, v = self._emulators[0].evaluate(samples[:, 0])
-        samples[:, 1] = m.squeeze()
-        samples[:, 2] = v.squeeze()
-        samples[:, 3] = implausibility(self._target_mean, m, self._target_variance, v).squeeze()
-        samples[:, 4] = np.zeros(budget)
+        start_x = self._designer(self._variable, budget)
+        start_m, start_v = self._emulators[0].evaluate(start_x)
+        start_i = implausibility(self._target_mean, start_m, self._target_variance, start_v)
 
         # Filter from wave 0
-        non_imp = samples[samples[:, 3] <= 3.0]
-        x = non_imp[:, 0].reshape(-1, 1)
+        x = start_x[start_i <= 3.0].reshape(-1, 1)
+        if x.shape[0] == 0:
+            return np.empty((0, 1)), np.empty((0, 1)), np.empty((0, 1)), np.empty((0, 1)), np.empty((0, 1))
 
         base = 1
         for wave in range(1, self._num_waves + 1):
 
             x_new = []
+            m_new = []
+            v_new = []
+            i_new = []
+            c_new = []
+
             # Calculate the cluster labels for each sample at this wave level
             ids = self._clusters[wave].predict(x)
             num_groups = len(self._clusters[wave].cluster_centers_)
             for g in range(num_groups):
-                filtered_by_cluster = x[ids == g, 0].reshape(-1, 1)
-                model = self._emulators[g + base]
+                filtered_by_cluster = x[ids == g]
+                emulator_index: int = g + base
+                model = self._emulators[emulator_index]
                 print(f"Cascading through: {model.ident}")
                 m, v = model.evaluate(filtered_by_cluster)
                 i = implausibility(self._target_mean, m, self._target_variance, v)
+                mask = i <= 3.0
                 accepted = filtered_by_cluster[i <= 3.0]
                 x_new.extend(accepted)
+                m_new.extend(m[mask])
+                v_new.extend(v[mask])
+                i_new.extend(i[mask])
+                c_new.extend([emulator_index] * accepted.shape[0])
             base += num_groups
             x = np.asarray(x_new).reshape(-1, 1)
 
-        return x
+        m = np.asarray(m_new).reshape(-1, 1)
+        v = np.asarray(v_new).reshape(-1, 1)
+        i = np.asarray(i_new).reshape(-1, 1)
+        c = np.asarray(c_new).reshape(-1, 1)
+        return x, m, v, i, c
 
 
     def plot_current(self, resolution: Union[int, None]=None, i_cut_off=3.0):
