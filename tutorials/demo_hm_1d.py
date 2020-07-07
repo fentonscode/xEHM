@@ -16,26 +16,24 @@ def main():
 
     hmatch = hm.HistoryMatching1D(min_x, max_x, z_mean, z_variance)
     hmatch.set_simulator(simulator)
-    hmatch.set_budgets(5, 100)
+    hmatch.set_budgets(5, 1000)
 
     hmatch.initialise()
-    hmatch.plot_current(resolution=20)
+    hmatch.plot_current(resolution=100)
     hmatch.plot_emulators()
 
-    hmatch.run_wave()
-    hmatch.plot_current(resolution=20)
-    hmatch.plot_emulators()
+    # Do 5 waves
+    for w in range(5):
 
-    hmatch.cascade_rejection_sampler(100)
+        hmatch.run_wave()
+        hmatch.plot_current(resolution=100)
+        hmatch.plot_emulators()
 
-    hmatch.run_wave()
-    hmatch.plot_current(resolution=20)
-    hmatch.plot_emulators()
+    print("Finished history matching")
 
-    hmatch.run_wave()
-
-    pass
-
+    # Print final samples
+    for s in hmatch._samples:
+        print(f"x: {s[0]} | i: {s[3]} | c: {s[4]}")
 
 if __name__ == '__main__':
     main()
