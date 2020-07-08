@@ -147,6 +147,7 @@ class Tree2D(Distribution):
         denom = 2 * np.pi * sigmax * sigmay * np.sqrt(1 - rho ** 2)
         return np.exp(-z / (2 * (1 - rho ** 2))) / denom
 
+    # This needs tidying up
     def probability(self, x):
         a = x.reshape(-1, 2)
         p2: float = 0.0
@@ -161,7 +162,7 @@ class Tree2D(Distribution):
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.25, 0.75, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.75, 0.25, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.75, 0.75, 0.0))
-        return np.where(np.apply_along_axis(in_box, 1, a), p, 0.0)
+        return np.where(np.apply_along_axis(in_box, 1, a), p, 0.0).reshape(-1, 1)
 
 
 # Uniform distribution: used as a default proposal
