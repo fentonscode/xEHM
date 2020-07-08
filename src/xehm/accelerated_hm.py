@@ -17,7 +17,7 @@ from .clustering import XMeans
 from .emulators import Emulator
 from .emulators import GaussianProcess
 from .designs import default_designer, default_selector
-from .diagnostics import LeaveOneOut
+from .diagnostics import LeaveOneOut, LeaveOneOutStrict
 from .graphics import plot_1d_nroy, plot_emulator_for_wave, plot_emulator_design_points
 from .graphics import HGraph
 from ._sample import SISOSampleSet
@@ -365,7 +365,8 @@ class HistoryMatching2D(HMBase):
         # Build and validate the emulator
         emulator = self._emulator_model()
         print(f"Constructed an emulator of type {emulator.ident}")
-        valid = self._diagnostic(emulator, initial_design, initial_runs)
+        valid = LeaveOneOutStrict(emulator_model=emulator).exec(initial_design, initial_runs)
+        #valid = self._diagnostic(emulator, initial_design, initial_runs)
         if not valid:
             print(f"Emulator failed diagnostics in initial wave")
             # What do we do here?
