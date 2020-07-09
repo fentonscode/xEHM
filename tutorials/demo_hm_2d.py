@@ -19,11 +19,10 @@ def main():
 
     hmatch = hm.HistoryMatching2D(min_x, max_x, z_mean, z_variance)
     hmatch.set_simulator(simulator)
-    hmatch.set_budgets(5, 1000)
-
-    hmatch.initialise()
-    hmatch.plot_current(resolution=100)
-    hmatch.plot_emulators()
+    hmatch.set_budgets(10, 100)
+    #hmatch.initialise()
+    #hmatch.plot_current(resolution=100)
+    #hmatch.plot_emulators()
 
     # Do 5 waves
     for w in range(5):

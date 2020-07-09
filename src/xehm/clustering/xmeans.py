@@ -113,6 +113,6 @@ def _cluster_variance(num_points, clusters, centroids) -> float:
     num_dims = clusters[0].shape[1] if clusters[0].ndim > 1 else 1
     denom: float = float(num_points - len(centroids)) * num_dims
     for cluster, centroid in zip(clusters, centroids):
-        distances = euclidean_distances(cluster, centroid.reshape(-1, 1))
+        distances = euclidean_distances(cluster, centroid.reshape(-1, num_dims))
         s += (distances * distances).sum()
     return s / denom

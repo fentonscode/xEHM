@@ -43,6 +43,10 @@ class LeaveOneOutStrict:
         self.sigmas = width
         self._critical_failure_rate = 1.0 - erf(self.sigmas / np.sqrt(2.0))
 
+        # Metrics
+        self._strict = False
+        self._statistical_pass = False
+
     def __bool__(self):
         return self.passed
 
@@ -75,14 +79,14 @@ class LeaveOneOutStrict:
         upper = np.add(outputs, delta)
         lower = np.subtract(outputs, delta)
 
-        self.passed = not (np.any(model_outs > upper) or np.any(model_outs < lower))
-
         too_high = model_outs > upper
         too_low = model_outs < lower
 
-        rate = (len(too_high) + len(too_low)) / n_samples
+        self.passed = not (np.any(too_high) or np.any(too_low))
+        failures = np.sum(too_low) + np.sum(too_high)
+        rate = failures / n_samples
         if rate > self._critical_failure_rate:
-            print("Diagnostic failed")
+            self._statistical_pass = False
 
         return self
 
