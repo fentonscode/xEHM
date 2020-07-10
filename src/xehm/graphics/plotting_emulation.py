@@ -39,3 +39,14 @@ def plot_emulator_for_wave(axes, wave_num, z_match, z_variance, x_min, x_max, x_
 #    fig, axes = make_single_figure_axes()
 #    axes.plot(emulator_x, emulator_y, 'kx')
 #    fig.show()
+
+
+#
+# 2D Emulator plots - Quad plot
+#
+# Top left: means with colour plot (0-1 band scale)
+# Top right: variances with colour plot (0 - inf scale)
+# Implausibility scatter + NROY with contour plot and colour bar (0 - inf scale)
+#
+def plot_emulator_2d():
+    pass

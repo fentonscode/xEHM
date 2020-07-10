@@ -136,3 +136,9 @@ def plot_nroy(n_dims: int, min_x, max_x, samples, resolution):
 
     num_plots = n_dims ** 2
     graph = HGraph().set_dimensions(n_dims, n_dims)
+
+    # Diagonal is the histogram for each input (Can do this now)
+    for index in range(num_plots):
+        diagonal = index // n_dims == 0
+        if diagonal:
+            pass

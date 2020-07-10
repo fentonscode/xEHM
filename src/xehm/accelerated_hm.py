@@ -17,7 +17,7 @@ from .clustering import XMeans
 from .emulators import Emulator
 from .emulators import GaussianProcess
 from .designs import default_designer, default_selector
-from .diagnostics import LeaveOneOut
+from .diagnostics import LeaveOneOut, LeaveOneOutStrict
 from .graphics import plot_1d_nroy, plot_emulator_for_wave, plot_emulator_design_points
 from .graphics import HGraph
 from ._sample import SISOSampleSet
@@ -332,6 +332,13 @@ class HistoryMatching2D(HMBase):
         self.sim_design_points = []
         self.sim_runs = []
 
+        # Generic N-way HM variables
+        self.x = None
+        self.m = None
+        self.v = None
+        self.i = None
+        self.c = None
+
     #
     # Initialise: Setup the first components for successive history matching waves
     #
@@ -365,7 +372,8 @@ class HistoryMatching2D(HMBase):
         # Build and validate the emulator
         emulator = self._emulator_model()
         print(f"Constructed an emulator of type {emulator.ident}")
-        valid = self._diagnostic(emulator, initial_design, initial_runs)
+        valid = LeaveOneOutStrict(emulator_model=emulator).exec(initial_design, initial_runs)
+        #valid = self._diagnostic(emulator, initial_design, initial_runs)
         if not valid:
             print(f"Emulator failed diagnostics in initial wave")
             # What do we do here?
@@ -392,6 +400,13 @@ class HistoryMatching2D(HMBase):
         self._clusters = [None]
         self._num_waves = 0
 
+        # Save state
+        self.x = emulator_x
+        self.m = means
+        self.v = variances
+        self.i = emulator_i
+        self.c = np.zeros(self._emulator_budget)
+
     def run_wave(self, i_cut_off=3.0):
 
         # Check for calling before initialisation
@@ -405,10 +420,16 @@ class HistoryMatching2D(HMBase):
 
         # Check the implausibility space and filter out 'good' samples
         non_imp = self._samples[self._samples[:, 3] <= i_cut_off]
+        mask = self.i[:, 0] <= i_cut_off
+
         print(f"Previous wave contains {self._samples.shape[0]} samples, {non_imp.shape[0]} are non-implausible")
 
-        # Numpy ruins 1D slices, so weld the dimension back on
-        locations = non_imp[:, 0].reshape(-1, 1)
+        # The reshape command prevents rouge 1D slices from breaking
+        locations = self.x[mask].reshape(-1, self.x.shape[1])
+
+        # Q: What do we do if there are no samples?
+        if locations.shape[0] == 0:
+            raise ValueError("No samples were non-implausible")
 
         # Each wave starts by inspecting the current available samples and discovering structure
         # np.newaxis stops numpy chopping off the dimensions
@@ -418,19 +439,8 @@ class HistoryMatching2D(HMBase):
         # TODO: Do we need to call KMeans again??
         clusters = KMeans(n_clusters=cl.n_groups).fit(locations)
         for i, c in enumerate(clusters.cluster_centers_):
-            print(f"Cluster {i + 1} centroid: {c[0]}")
+            print(f"Cluster {i + 1} centroid: {','.join([str(k) for k in c])}")
         self._clusters.append(clusters)
-
-        # Split space using cluster centres
-        splits = []
-        self._splits.append([])
-        locs = sorted(clusters.cluster_centers_)
-        if cl.n_groups > 1:
-            splits = [0.5 * (locs[i + 1] + locs[i]) for i in range(cl.n_groups - 1)]
-            self._splits[-1] = splits
-        for split in splits:
-            print(f"Split space at {split}")
-            self._space.split_location(float(split))
 
         # Build emulators for each cluster
         for c in range(cl.n_groups):
@@ -464,7 +474,7 @@ class HistoryMatching2D(HMBase):
 
         ## PREVIOUS INDENT
         # Generate new samples for the next iteration
-        x, m, v, i, c = self.cascade_rejection_sampler(self._emulator_budget)
+        x, m, v, i, c = cascade_rejection_sampler(self, self._emulator_budget, 2)
 
         self._samples = np.zeros((x.shape[0], 5))
         self._samples[:, 0] = x.squeeze()
@@ -596,7 +606,7 @@ def cascade_rejection_sampler(match_job, budget: int, dimensions: int = 1) -> \
     start_i = implausibility(match_job._target_mean, start_m, match_job._target_variance, start_v)
 
     # Filter from wave 0
-    x = start_x[start_i <= 3.0].reshape(-1, 1)
+    x = start_x[start_i[:, 0] <= 3.0].reshape(-1, dimensions)
     if x.shape[0] == 0:
         return np.empty((0, dimensions)) * 5
 
@@ -620,15 +630,15 @@ def cascade_rejection_sampler(match_job, budget: int, dimensions: int = 1) -> \
             m, v = model.evaluate(filtered_by_cluster)
             match_job._n_emulator_calls += filtered_by_cluster.shape[0]
             i = implausibility(match_job._target_mean, m, match_job._target_variance, v)
-            mask = i <= 3.0
-            accepted = filtered_by_cluster[i <= 3.0]
+            mask = i[:, 0] <= 3.0
+            accepted = filtered_by_cluster[mask]
             x_new.extend(accepted)
             m_new.extend(m[mask])
             v_new.extend(v[mask])
             i_new.extend(i[mask])
             c_new.extend([emulator_index] * accepted.shape[0])
         base += num_groups
-        x = np.asarray(x_new).reshape(-1, 1)
+        x = np.asarray(x_new).reshape(-1, dimensions)
 
     m = np.asarray(m_new).reshape(-1, 1)
     v = np.asarray(v_new).reshape(-1, 1)
