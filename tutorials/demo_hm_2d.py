@@ -19,13 +19,13 @@ def main():
 
     hmatch = hm.HistoryMatching2D(min_x, max_x, z_mean, z_variance)
     hmatch.set_simulator(simulator)
-    hmatch.set_budgets(10, 100000)
+    hmatch.set_budgets(50, 100000)
 
     hmatch.initialise()
     hmatch.plot_samples()
 
     # Do 5 waves
-    for w in range(5):
+    for w in range(10):
 
         hmatch.run_wave()
         hmatch.plot_samples()
@@ -35,8 +35,8 @@ def main():
     print("Finished history matching")
 
     # Print final samples
-    for s in hmatch._samples:
-        print(f"x: {s[0]} | i: {s[3]} | c: {s[4]}")
+    for s in zip(hmatch.x, hmatch.i, hmatch.c):
+        print(f"x: {s[0]} | i: {s[1]} | c: {s[2]}")
 
 
 if __name__ == '__main__':

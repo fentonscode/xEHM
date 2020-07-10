@@ -58,4 +58,7 @@ def plot_2d_samples(samples: np.ndarray, implausibility: np.ndarray = None, i_cu
         x = samples[:, 0]
         y = samples[:, 1]
         ax.scatter(x, y, marker='+', color="b")
+    # FIXME: sort this later
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(0.0, 1.0)
     fig.show()
