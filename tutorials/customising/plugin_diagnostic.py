@@ -16,4 +16,6 @@ def ignore_diagnostics(**kwargs) -> bool:
     if "debug_print" in kwargs:
         if kwargs["debug_print"]:
             print("ignore_diagnostics: passing through diagnostic stage")
+            k_string = '\n'.join(str(kwargs).strip('{}').split(','))
+            print(f"parameters:\n\n{k_string}")
     return True

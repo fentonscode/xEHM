@@ -523,6 +523,8 @@ def initialise_wave_zero(match_job, n_points: Union[int, None] = None):
     # Build and validate the emulator
     emulator = match_job._emulator_model()
     print(f"Constructed an emulator of type {emulator.ident}")
+    valid = match_job._diagnostic(emulator_model=emulator, reference_inputs=initial_design,
+                                  reference_outputs=initial_runs, debug_print=True)
     valid = LeaveOneOutStrict(emulator_model=emulator).exec(initial_design, initial_runs)
     # valid = match_job._diagnostic(emulator, initial_design, initial_runs)
     if not valid:

@@ -21,6 +21,11 @@ def main():
     hmatch.set_simulator(simulator)
     hmatch.set_budgets(50, 100000)
 
+    # Load in a custom diagnostic suite, then call it to generate the functions for each test
+    diagnostic_suite = hm.utils.build_custom_plugin("..\\customising\\plugin_diagnostic::diagnostic_none")
+    diagnostic_functions = diagnostic_suite()
+    hmatch._diagnostic = diagnostic_functions[0]
+
     hmatch.initialise()
     hmatch.plot_samples()
 
@@ -29,8 +34,6 @@ def main():
 
         hmatch.run_wave()
         hmatch.plot_samples()
-        #hmatch.plot_current(resolution=100)
-        #hmatch.plot_emulators()
 
     print("Finished history matching")
 
@@ -40,13 +43,4 @@ def main():
 
 
 if __name__ == '__main__':
-
-    # Custom diagnostic stub check (move to test)
-    diag = hm.diagnostics.build_custom_diagnostic("C:\\CovidSims\\Forks\\xEHM\\tutorials\\diagnostic_none::diagnostic_none")
-    kargs = {"param1": 1.0}
-    args = {"param2": 0.0}
-    funcs = diag(**kargs)
-    for func in funcs:
-        result = func(**args)
-        
     main()
