@@ -1,47 +1,74 @@
 #
 # Python plugin system
 #
-# Usage:
-# if obj is None:
-#     obj = xehm.type.default
-# else:
-#     obj = build_plugin(obj)
-#
 
-from typing import Callable
+from typing import Callable, List, Union
 from importlib import import_module
 from importlib.util import spec_from_file_location, module_from_spec
+from types import ModuleType
 import os
+import sys
 
-__all__ = ["Plugin", "import_plugin"]
+__all__ = ["Plugin", "import_plugin", "build_custom_plugin"]
 
-# Define a plugin as a function with variable arguments that returns a bool
-Plugin = Callable[...,  bool]
+# Plugins are collections of functions that take variable arguments but return True or False
+# TODO: What about returning an int to have different failure / success options?
+Plugin = Callable[...,  Union[bool, List[bool]]]
 
 
+# Search for the function in the pre-defined API list if the user has provided one
+# This allows code to be re-used from large packages as well imported from basic scripts
+#
+# If a package string is supplied then only that package will be searched
+#   - e.g.: xehm.diagnostics searches only the diagnostics API
+#
+# If a package string is not supplied then the subpackages of api_ident will be searched one level down
+#   - NOTE: Any module imports that fail will be skipped
+#
+def search_in_api(plugin_name: str, package: str = None, api_ident: str = "xehm"):
+
+    match = None
+    search_modules = []
+
+    # If there is no package to filter by, load the top level package and check one level down
+    # (this API is designed to store customisable units as sub-packages)
+    if package is None:
+        top_level_package = import_module(api_ident)
+        potential_subpackages: List[str] = [s for i, s in enumerate(dir(top_level_package))
+                                            if isinstance(getattr(top_level_package, s), ModuleType)]
+        for sub in potential_subpackages:
+            try:
+                module = import_module(f"{api_ident}.{sub}")
+                search_modules.append(module)
+            except ImportError as e:
+                print(f"Unable to load module {e}. It will not be searched")
+                pass
+    else:
+        search_modules.append(import_module(package))
+
+    for test in search_modules:
+        try:
+            match = getattr(test, plugin_name)
+            return match
+        except AttributeError:
+            pass
+
+    return match
+
+
+# Try to import a plugin from various sources, errors will return None
 def import_plugin(module: str):
-    """This will try to import the passed module. This will return
-       the module if it was imported, or will return 'None' if
-       it should not be imported.
-
-       Parameters
-       ----------
-       module: str
-         The name of the module to import
-    """
     try:
         m = import_module(module)
     except SyntaxError as e:
-        print(
-            f"\nSyntax error when importing {module}\n"
-            f"{e.__class__.__name__}:{e}\n"
-            f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '} |\n"
-            f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '}\\|/\n"
-            f"Line {e.lineno}.{e.offset}: {e.text}")
+        print(f"\nSyntax error when importing {module}\n"
+              f"{e.__class__.__name__}:{e}\n"
+              f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '} |\n"
+              f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '}\\|/\n"
+              f"Line {e.lineno}.{e.offset}: {e.text}")
         m = None
     except ImportError:
         # this is ok and expected if the module is in a python file
-        # that will be loaded below
         m = None
     except Exception:
         # something else went wrong
@@ -86,3 +113,87 @@ def import_plugin(module: str):
         print(f"IMPORT {m}")
 
     return m
+
+#
+# Builds a custom plugin supplied by the user and wraps it into a callable Python function
+#
+# By default the priority order is:
+#   - 1) Pre-defined functions in the xEHM API
+#   - 2) Current imported symbols
+#   - 3) From the disk
+#   - 4) Direct wrapping of the object supplied as a parameter
+#
+def build_custom_plugin(plugin_name: Union[str, Plugin, Callable[..., List[Plugin]]], parent_ident: str = "__main__"
+                        ) -> Plugin:
+
+    import_exception_message: str = f"Could not import the plugin '{plugin_name}'"
+
+    # If a function name was passed, then try to find it in the current scope / xehm library
+    if isinstance(plugin_name, str):
+        print(f"Importing a custom plugin from {plugin_name}")
+
+        # Search for the function in the pre-defined API list if the user has provided one
+        match = search_in_api(plugin_name)
+        if match is not None:
+            return build_custom_plugin(match)
+
+        # do we have the function in the current namespace?
+        try:
+            match = getattr(sys.modules[__name__], plugin_name)
+            return build_custom_plugin(match)
+        except AttributeError:
+            pass
+
+        # how about the __name__ namespace of the caller
+        try:
+            match = getattr(sys.modules[parent_ident], plugin_name)
+            return build_custom_plugin(match)
+        except AttributeError:
+            pass
+
+        # how about the __main__ namespace (e.g. if this was loaded in a script)
+        try:
+            match = getattr(sys.modules["__main__"], plugin_name)
+            return build_custom_plugin(match)
+        except AttributeError:
+            pass
+
+        # Try an import using module::function syntax
+        if plugin_name.find("::") != -1:
+            parts = plugin_name.split("::")
+            func_name = parts[-1]
+            func_module = "::".join(parts[0:-1])
+        else:
+            print(f"Plugin functions must be specified using the {plugin_name}::your_function syntax")
+            raise ImportError(import_exception_message)
+
+        module = import_plugin(func_module)
+
+        if module is None:
+            # cannot find the code
+            print(f"Cannot find the diagnostic '{plugin_name}'. Please check the path and spelling")
+            raise ImportError(import_exception_message)
+
+        else:
+            if hasattr(module, func_name):
+                return build_custom_plugin(getattr(module, func_name))
+            print(f"Could not find the function '{func_name}' in the module '{func_module}'. Check that the spelling "
+                  f"is correct and that the right version of the module is being loaded.")
+            raise ImportError(import_exception_message)
+
+    # Check for a callable attribute
+    if not callable(plugin_name):
+        print(f"Cannot import {plugin_name} as it is not recognised as a function.")
+        raise ValueError(f"Custom diagnostic '{plugin_name}' cannot be called as a function")
+
+    print(f"Building a custom diagnostic for {plugin_name}")
+    built_code = lambda **kwargs: wrapper(func=plugin_name, **kwargs)
+    return built_code
+
+
+# Wrapper for a custom diagnostic to allow injecting any default behaviour
+# func should be a custom plugin that returns a list of functions to run
+def wrapper(func: Callable[..., List[Plugin]], **kwargs) -> List[Plugin]:
+    if func is None:
+        raise NotImplementedError("No default behaviour implemented, a function must be supplied")
+    return func(**kwargs)
