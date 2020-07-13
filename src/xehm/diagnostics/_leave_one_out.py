@@ -2,10 +2,14 @@
 # NOTE: scikit-learn has something called this, but it doesn't do what we need it to do
 
 from ..emulators.emulator import Emulator
+from typing import List
+from ..utils import Plugin
 import numpy as np
 from math import erf
+from ..graphics import plot_diagnostic_report
+from ..utils.console import print_progress_bar
 
-__all__ = ["LeaveOneOut", "LeaveOneOutStrict"]
+__all__ = ["LeaveOneOut", "LeaveOneOutStrict", "leave_one_out"]
 
 
 #
@@ -92,3 +96,56 @@ class LeaveOneOutStrict:
 
     def plot_report(self):
         pass
+
+
+def leave_one_out(**kwargs) -> List[Plugin]:
+    return [leave_one_out_cross_validate]
+
+
+def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.ndarray,
+                                 reference_outputs: np.ndarray, sigmas: float = 2.0, strict: bool = False,
+                                 **kwargs) -> bool:
+
+    n_samples = reference_inputs.shape[0]
+    n_input_dims = reference_inputs.shape[1]
+    n_output_dims = reference_outputs.shape[1]
+    variances = np.zeros((n_samples, n_output_dims))
+    model_outs = np.zeros((n_samples, n_output_dims))
+
+    print_progress_bar(0, n_samples, "Running cross validation", "complete")
+
+    for i in range(n_samples):
+
+        # Mask out the sample to be predicted
+        mask = (np.arange(n_samples) != i)
+        train_inputs = reference_inputs[mask]
+        train_outputs = reference_outputs[mask]
+
+        # Train the emulator on the reduced set
+        emulator_model.train(train_inputs, train_outputs)
+
+        # Fix numpy chopping the bloody dimensions off silently again!!!!!
+        em_in = reference_inputs[i].reshape(1, n_input_dims)
+
+        # Predict the missing point
+        model_outs[i], variances[i] = emulator_model.evaluate(em_in)
+        print_progress_bar(i + 1, n_samples, "Running cross validation", "complete")
+
+    delta = np.multiply(sigmas, np.sqrt(variances))
+    upper = np.add(reference_outputs, delta)
+    lower = np.subtract(reference_outputs, delta)
+    too_high = model_outs > upper
+    too_low = model_outs < lower
+
+    if "plot_report" in kwargs and kwargs["plot_report"]:
+        plot_diagnostic_report(reference_inputs, reference_outputs, model_outs, delta, delta)
+
+    # If this is a strict test, then fail if any samples are out of range
+    if strict:
+        return not (np.any(too_high) or np.any(too_low))
+
+    failures = np.sum(too_low) + np.sum(too_high)
+    rate = failures / n_samples
+    critical_failure_rate = 1.0 - erf(sigmas / np.sqrt(2.0))
+
+    return not rate > critical_failure_rate

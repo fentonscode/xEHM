@@ -1,6 +1,6 @@
 from textwrap import fill
 
-__all__ = ["print_separator_line", "print_progress_bar", "print_header"]
+__all__ = ["print_separator_line", "print_progress_bar", "print_header", "print_kwargs"]
 
 
 # Print a separator line on the console
@@ -20,10 +20,18 @@ def print_header(msg: str, separator_char: str = "-", line_length: int = 80):
 def print_progress_bar(iteration: int, total: int, prefix: str = '', suffix: str = '', decimals: int = 1,
                        length: int = 80, fill: str = '█', newline_end: bool = True):
     p_value = 100 * (iteration / float(total))
-    percent = f"{p_value:.{decimals}}"
+    percent = f"{p_value:.{decimals}f}"
     filled_length = int(length * iteration // total)
     bar = fill * filled_length + '-' * (length - filled_length)
     print(f'\r{prefix} |{bar}| {percent}%% {suffix}', end="", flush=True)
     # Blank print on Complete to clear the line
     if iteration == total and newline_end:
         print()
+
+
+# Pretty-print for variable length arguments
+def print_kwargs(**kwargs):
+    k_string = '\n'.join(str(kwargs).strip('{}').split(','))
+    msg = "Keyword parameters"
+    line = '-' * len(msg)
+    print(f"{msg}\n{line}\n{k_string}\n{line}")

@@ -17,7 +17,7 @@ from .clustering import XMeans
 from .emulators import Emulator
 from .emulators import GaussianProcess
 from .designs import default_designer, default_selector
-from .diagnostics import LeaveOneOut, LeaveOneOutStrict
+from .diagnostics import LeaveOneOut, LeaveOneOutStrict, leave_one_out
 from .graphics import plot_1d_nroy, plot_emulator_for_wave, plot_emulator_design_points
 from .graphics import HGraph, plot_2d_samples
 from ._sample import SISOSampleSet
@@ -33,7 +33,7 @@ __all__ = ["HistoryMatching1D", "HistoryMatching2D"]
 class HMBase:
     def __init__(self, emulator_budget: int = 1000, input_dimensions: int = 1, simulator_budget: int = 10,
                  emulator_model: Emulator = GaussianProcess, design_process=default_designer,
-                 diagnostics=LeaveOneOut.cross_validate):
+                 diagnostics=leave_one_out):
         self._sim_function = None
         self._emulator_budget = emulator_budget
         self._simulator_budget = simulator_budget
@@ -45,7 +45,7 @@ class HMBase:
         # Analysis components
         self._emulator_model = emulator_model
         self._designer = design_process
-        self._diagnostic = diagnostics
+        self._diagnostic = diagnostics()[0]
 
         # Performance stats
         self._n_sim_calls = 0
@@ -360,6 +360,8 @@ class HistoryMatching2D(HMBase):
         self.v = None
         self.c = None
 
+        self.diagnostic_settings = {"plot_report": True}
+
     #
     # Initialise: Setup the first components for successive history matching waves
     #
@@ -402,7 +404,11 @@ class HistoryMatching2D(HMBase):
         print(f"Assigning points to space: recommending {cl.n_groups} clusters")
 
         # TODO: Do we need to call KMeans again??
-        clusters = KMeans(n_clusters=cl.n_groups).fit(locations)
+        # FIXME: Remove this hack - it is just to speed up local testing
+        recs = cl.n_groups
+        if recs > 4:
+            recs = 4
+        clusters = KMeans(n_clusters=recs).fit(locations)
         for i, c in enumerate(clusters.cluster_centers_):
             print(f"Cluster {i + 1} centroid: {','.join([str(k) for k in c])}")
         self._clusters.append(clusters)
@@ -419,7 +425,8 @@ class HistoryMatching2D(HMBase):
 
             emulator = self._emulator_model()
             print(f"Constructed an emulator of type {emulator.ident}")
-            valid = self._diagnostic(emulator, cl_samples, cl_runs)
+            valid = self._diagnostic(emulator_model=emulator, reference_inputs=cl_samples, reference_outputs=cl_runs,
+                                     **self.diagnostic_settings)
             if not valid:
                 print(f"Emulator failed diagnostics")
                 # What do we do here?
@@ -524,9 +531,7 @@ def initialise_wave_zero(match_job, n_points: Union[int, None] = None):
     emulator = match_job._emulator_model()
     print(f"Constructed an emulator of type {emulator.ident}")
     valid = match_job._diagnostic(emulator_model=emulator, reference_inputs=initial_design,
-                                  reference_outputs=initial_runs, debug_print=True)
-    valid = LeaveOneOutStrict(emulator_model=emulator).exec(initial_design, initial_runs)
-    # valid = match_job._diagnostic(emulator, initial_design, initial_runs)
+                                  reference_outputs=initial_runs, debug_print=True, **match_job.diagnostic_settings)
     if not valid:
         print(f"Emulator failed diagnostics in initial wave")
         # What do we do here?
