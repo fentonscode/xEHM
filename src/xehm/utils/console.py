@@ -20,7 +20,7 @@ def print_header(msg: str, separator_char: str = "-", line_length: int = 80):
 def print_progress_bar(iteration: int, total: int, prefix: str = '', suffix: str = '', decimals: int = 1,
                        length: int = 80, fill: str = '█', newline_end: bool = True):
     p_value = 100 * (iteration / float(total))
-    percent = f"{p_value:.{decimals}}"
+    percent = f"{p_value:.{decimals}f}"
     filled_length = int(length * iteration // total)
     bar = fill * filled_length + '-' * (length - filled_length)
     print(f'\r{prefix} |{bar}| {percent}%% {suffix}', end="", flush=True)

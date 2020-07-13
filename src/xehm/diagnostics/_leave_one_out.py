@@ -6,6 +6,8 @@ from typing import List
 from ..utils import Plugin
 import numpy as np
 from math import erf
+from ..graphics import plot_diagnostic_report
+from ..utils.console import print_progress_bar
 
 __all__ = ["LeaveOneOut", "LeaveOneOutStrict", "leave_one_out"]
 
@@ -110,6 +112,8 @@ def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.
     variances = np.zeros((n_samples, n_output_dims))
     model_outs = np.zeros((n_samples, n_output_dims))
 
+    print_progress_bar(0, n_samples, "Running cross validation", "complete")
+
     for i in range(n_samples):
 
         # Mask out the sample to be predicted
@@ -125,12 +129,16 @@ def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.
 
         # Predict the missing point
         model_outs[i], variances[i] = emulator_model.evaluate(em_in)
+        print_progress_bar(i + 1, n_samples, "Running cross validation", "complete")
 
     delta = np.multiply(sigmas, np.sqrt(variances))
     upper = np.add(reference_outputs, delta)
     lower = np.subtract(reference_outputs, delta)
     too_high = model_outs > upper
     too_low = model_outs < lower
+
+    if "plot_report" in kwargs and kwargs["plot_report"]:
+        plot_diagnostic_report(reference_inputs, reference_outputs, model_outs, delta, delta)
 
     # If this is a strict test, then fail if any samples are out of range
     if strict:

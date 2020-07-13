@@ -360,6 +360,8 @@ class HistoryMatching2D(HMBase):
         self.v = None
         self.c = None
 
+        self.diagnostic_settings = {"plot_report": True}
+
     #
     # Initialise: Setup the first components for successive history matching waves
     #
@@ -402,7 +404,7 @@ class HistoryMatching2D(HMBase):
         print(f"Assigning points to space: recommending {cl.n_groups} clusters")
 
         # TODO: Do we need to call KMeans again??
-        # FIXME: Remove this hack
+        # FIXME: Remove this hack - it is just to speed up local testing
         recs = cl.n_groups
         if recs > 4:
             recs = 4
@@ -423,7 +425,8 @@ class HistoryMatching2D(HMBase):
 
             emulator = self._emulator_model()
             print(f"Constructed an emulator of type {emulator.ident}")
-            valid = self._diagnostic(emulator_model=emulator, reference_inputs=cl_samples, reference_outputs=cl_runs)
+            valid = self._diagnostic(emulator_model=emulator, reference_inputs=cl_samples, reference_outputs=cl_runs,
+                                     **self.diagnostic_settings)
             if not valid:
                 print(f"Emulator failed diagnostics")
                 # What do we do here?
@@ -528,7 +531,7 @@ def initialise_wave_zero(match_job, n_points: Union[int, None] = None):
     emulator = match_job._emulator_model()
     print(f"Constructed an emulator of type {emulator.ident}")
     valid = match_job._diagnostic(emulator_model=emulator, reference_inputs=initial_design,
-                                  reference_outputs=initial_runs, debug_print=True)
+                                  reference_outputs=initial_runs, debug_print=True, **match_job.diagnostic_settings)
     if not valid:
         print(f"Emulator failed diagnostics in initial wave")
         # What do we do here?

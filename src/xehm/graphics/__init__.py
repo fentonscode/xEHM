@@ -3,8 +3,9 @@
 #
 
 import matplotlib.pyplot as plt
-from .plotting_emulation import *
 from .figure_controls import *
+from .plotting_diagnostics import *
+from .plotting_emulation import *
 from .plotting_nroy import *
 
 
