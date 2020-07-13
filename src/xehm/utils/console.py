@@ -1,6 +1,6 @@
 from textwrap import fill
 
-__all__ = ["print_separator_line", "print_progress_bar", "print_header"]
+__all__ = ["print_separator_line", "print_progress_bar", "print_header", "print_kwargs"]
 
 
 # Print a separator line on the console
@@ -27,3 +27,11 @@ def print_progress_bar(iteration: int, total: int, prefix: str = '', suffix: str
     # Blank print on Complete to clear the line
     if iteration == total and newline_end:
         print()
+
+
+# Pretty-print for variable length arguments
+def print_kwargs(**kwargs):
+    k_string = '\n'.join(str(kwargs).strip('{}').split(','))
+    msg = "Keyword parameters"
+    line = '-' * len(msg)
+    print(f"{msg}\n{line}\n{k_string}\n{line}")

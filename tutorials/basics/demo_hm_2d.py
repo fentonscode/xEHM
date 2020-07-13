@@ -21,11 +21,6 @@ def main():
     hmatch.set_simulator(simulator)
     hmatch.set_budgets(50, 100000)
 
-    # Load in a custom diagnostic suite, then call it to generate the functions for each test
-    diagnostic_suite = hm.utils.build_custom_plugin("..\\customising\\plugin_diagnostic::diagnostic_none")
-    diagnostic_functions = diagnostic_suite()
-    hmatch._diagnostic = diagnostic_functions[0]
-
     hmatch.initialise()
     hmatch.plot_samples()
 
