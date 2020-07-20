@@ -136,9 +136,10 @@ def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.
     lower = np.subtract(reference_outputs, delta)
     too_high = model_outs > upper
     too_low = model_outs < lower
+    results = np.logical_not(np.logical_or(too_low, too_high))
 
     if "plot_report" in kwargs and kwargs["plot_report"]:
-        plot_diagnostic_report(reference_inputs, reference_outputs, model_outs, delta, delta)
+        plot_diagnostic_report(reference_inputs, reference_outputs, model_outs, delta, delta, results)
 
     # If this is a strict test, then fail if any samples are out of range
     if strict:
