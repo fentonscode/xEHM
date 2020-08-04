@@ -10,5 +10,6 @@ from . import utils
 
 from .accelerated_hm import *
 from ._distributions import *
+from ._exceptions import *
 from ._history_matching import *
 from ._variables import *

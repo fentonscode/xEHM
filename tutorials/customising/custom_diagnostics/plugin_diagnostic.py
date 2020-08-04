@@ -1,21 +1,11 @@
-from xehm.utils import Plugin
-from typing import List
+from xehm.utils.plugin import ReturnState
+from xehm.utils import print_kwargs
+from scipy.spatial.distance import cosine
 
 
-# Null diagnostic suite - invokes ignore diagnostics
-def diagnostic_none(**kwargs) -> List[Plugin]:
-    if "debug_print" in kwargs:
-        if kwargs["debug_print"]:
-            k_string = '\n'.join(str(kwargs).strip('{}').split(','))
-            print(f"Calling diagnostic_none with parameters:\n\n{k_string}")
-    return [ignore_diagnostics]
-
-
-# ignore_diagnostics - simply returns true to pass straight through the diagnostic stage
-def ignore_diagnostics(**kwargs) -> bool:
-    if "debug_print" in kwargs:
-        if kwargs["debug_print"]:
-            print("ignore_diagnostics: passing through diagnostic stage")
-            k_string = '\n'.join(str(kwargs).strip('{}').split(','))
-            print(f"parameters:\n\n{k_string}")
-    return True
+# Compute a cosine distance as a diagnostic over two sets
+def cosine_diagnostic(set_a, set_b, **kwargs) -> (int, float):
+    if "debug_print" in kwargs and kwargs["debug_print"]:
+        print_kwargs(**kwargs)
+    score = cosine(set_a, set_b)
+    return ReturnState.ok, score

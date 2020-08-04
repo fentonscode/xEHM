@@ -2,8 +2,7 @@
 # NOTE: scikit-learn has something called this, but it doesn't do what we need it to do
 
 from ..emulators.emulator import Emulator
-from typing import List
-from ..utils import Plugin
+from ..utils.plugin import ReturnState
 import numpy as np
 from math import erf
 from ..graphics import plot_diagnostic_report
@@ -98,15 +97,22 @@ class LeaveOneOutStrict:
         pass
 
 
-def leave_one_out(**kwargs) -> List[Plugin]:
-    return [leave_one_out_cross_validate]
+def leave_one_out(emulator_model: Emulator, reference_inputs: np.ndarray, reference_outputs: np.ndarray,
+                  sigmas: float = 2.0, strict: bool = False, **kwargs) -> (int, bool):
+    return leave_one_out_cross_validate(emulator_model, reference_inputs, reference_outputs, sigmas, strict, **kwargs)
 
 
 def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.ndarray,
                                  reference_outputs: np.ndarray, sigmas: float = 2.0, strict: bool = False,
-                                 **kwargs) -> bool:
+                                 **kwargs) -> (int, bool):
 
-    n_samples = reference_inputs.shape[0]
+    n_samples: int = reference_inputs.shape[0]
+
+    # If there are no input samples, the diagnostic fails, but doesn't stop the analysis as
+    # there might be times when this gets called over null emulators (although it shouldn't!!)
+    if n_samples == 0:
+        return ReturnState.fail_ignore, False
+
     n_input_dims = reference_inputs.shape[1]
     n_output_dims = reference_outputs.shape[1]
     variances = np.zeros((n_samples, n_output_dims))
@@ -143,10 +149,10 @@ def leave_one_out_cross_validate(emulator_model: Emulator, reference_inputs: np.
 
     # If this is a strict test, then fail if any samples are out of range
     if strict:
-        return not (np.any(too_high) or np.any(too_low))
+        return ReturnState.ok, not (np.any(too_high) or np.any(too_low))
 
     failures = np.sum(too_low) + np.sum(too_high)
     rate = failures / n_samples
     critical_failure_rate = 1.0 - erf(sigmas / np.sqrt(2.0))
 
-    return not rate > critical_failure_rate
+    return ReturnState.ok, not rate > critical_failure_rate

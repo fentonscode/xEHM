@@ -2,18 +2,26 @@
 # Python plugin system
 #
 
-from typing import Callable, List, Union
+from typing import Any, Callable, List, Tuple, Union
 from importlib import import_module
 from importlib.util import spec_from_file_location, module_from_spec
 from types import ModuleType
-import os
-import sys
+from os.path import exists
+from sys import modules
+from enum import IntEnum
 
-__all__ = ["Plugin", "import_plugin", "build_custom_plugin"]
+__all__ = ["Plugin", "import_plugin", "build_custom_plugin", "ReturnState"]
 
-# Plugins are collections of functions that take variable arguments but return True or False
-# TODO: What about returning an int to have different failure / success options?
-Plugin = Callable[...,  Union[bool, List[bool]]]
+# Plugins are functions that take variable arguments but return status codes and data
+Plugin = Callable[..., Tuple[int, Any]]
+
+
+# PEP 435 Says do this, check this is right
+class ReturnState(IntEnum):
+    ok = 1
+    fail_stop = 0
+    fail_ignore = -1
+    fail_retry = -2
 
 
 # Search for the function in the pre-defined API list if the user has provided one
@@ -26,7 +34,6 @@ Plugin = Callable[...,  Union[bool, List[bool]]]
 #   - NOTE: Any module imports that fail will be skipped
 #
 def search_in_api(plugin_name: str, package: str = None, api_ident: str = "xehm"):
-
     match = None
     search_modules = []
 
@@ -63,8 +70,8 @@ def import_plugin(module: str):
     except SyntaxError as e:
         print(f"\nSyntax error when importing {module}\n"
               f"{e.__class__.__name__}:{e}\n"
-              f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '} |\n"
-              f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '}\\|/\n"
+              f"Line {e.lineno}.{e.offset}:{(e.offset - 1) * ' '} |\n"
+              f"Line {e.lineno}.{e.offset}:{(e.offset - 1) * ' '}\\|/\n"
               f"Line {e.lineno}.{e.offset}: {e.text}")
         m = None
     except ImportError:
@@ -78,9 +85,9 @@ def import_plugin(module: str):
     if m is None:
         try:
             # Try to find with no extension and py extension
-            if os.path.exists(module):
+            if exists(module):
                 pyfile = module
-            elif os.path.exists(f"{module}.py"):
+            elif exists(f"{module}.py"):
                 pyfile = f"{module}.py"
             else:
                 pyfile = None
@@ -100,8 +107,8 @@ def import_plugin(module: str):
             print(
                 f"\nSyntax error when reading {pyfile}\n"
                 f"{e.__class__.__name__}:{e}\n"
-                f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '} |\n"
-                f"Line {e.lineno}.{e.offset}:{(e.offset-1)*' '}\\|/\n"
+                f"Line {e.lineno}.{e.offset}:{(e.offset - 1) * ' '} |\n"
+                f"Line {e.lineno}.{e.offset}:{(e.offset - 1) * ' '}\\|/\n"
                 f"Line {e.lineno}.{e.offset}: {e.text}")
         except Exception as e:
             print(
@@ -114,6 +121,7 @@ def import_plugin(module: str):
 
     return m
 
+
 #
 # Builds a custom plugin supplied by the user and wraps it into a callable Python function
 #
@@ -123,9 +131,7 @@ def import_plugin(module: str):
 #   - 3) From the disk
 #   - 4) Direct wrapping of the object supplied as a parameter
 #
-def build_custom_plugin(plugin_name: Union[str, Plugin, Callable[..., List[Plugin]]], parent_ident: str = "__main__"
-                        ) -> Plugin:
-
+def build_custom_plugin(plugin_name: Union[str, Plugin], parent_ident: str = "__main__", **build_parameters) -> Plugin:
     import_exception_message: str = f"Could not import the plugin '{plugin_name}'"
 
     # If a function name was passed, then try to find it in the current scope / xehm library
@@ -135,26 +141,26 @@ def build_custom_plugin(plugin_name: Union[str, Plugin, Callable[..., List[Plugi
         # Search for the function in the pre-defined API list if the user has provided one
         match = search_in_api(plugin_name)
         if match is not None:
-            return build_custom_plugin(match)
+            return build_custom_plugin(match, **build_parameters)
 
         # do we have the function in the current namespace?
         try:
-            match = getattr(sys.modules[__name__], plugin_name)
-            return build_custom_plugin(match)
+            match = getattr(modules[__name__], plugin_name)
+            return build_custom_plugin(match, **build_parameters)
         except AttributeError:
             pass
 
         # how about the __name__ namespace of the caller
         try:
-            match = getattr(sys.modules[parent_ident], plugin_name)
-            return build_custom_plugin(match)
+            match = getattr(modules[parent_ident], plugin_name)
+            return build_custom_plugin(match, **build_parameters)
         except AttributeError:
             pass
 
         # how about the __main__ namespace (e.g. if this was loaded in a script)
         try:
-            match = getattr(sys.modules["__main__"], plugin_name)
-            return build_custom_plugin(match)
+            match = getattr(modules["__main__"], plugin_name)
+            return build_custom_plugin(match, **build_parameters)
         except AttributeError:
             pass
 
@@ -171,12 +177,12 @@ def build_custom_plugin(plugin_name: Union[str, Plugin, Callable[..., List[Plugi
 
         if module is None:
             # cannot find the code
-            print(f"Cannot find the diagnostic '{plugin_name}'. Please check the path and spelling")
+            print(f"Cannot find the plugin '{plugin_name}'. Please check the path and spelling")
             raise ImportError(import_exception_message)
 
         else:
             if hasattr(module, func_name):
-                return build_custom_plugin(getattr(module, func_name))
+                return build_custom_plugin(getattr(module, func_name), **build_parameters)
             print(f"Could not find the function '{func_name}' in the module '{func_module}'. Check that the spelling "
                   f"is correct and that the right version of the module is being loaded.")
             raise ImportError(import_exception_message)
@@ -184,16 +190,17 @@ def build_custom_plugin(plugin_name: Union[str, Plugin, Callable[..., List[Plugi
     # Check for a callable attribute
     if not callable(plugin_name):
         print(f"Cannot import {plugin_name} as it is not recognised as a function.")
-        raise ValueError(f"Custom diagnostic '{plugin_name}' cannot be called as a function")
+        raise ValueError(f"Custom plugin '{plugin_name}' cannot be called as a function")
 
-    print(f"Building a custom diagnostic for {plugin_name}")
+    print(f"Building a custom plugin for {plugin_name}")
     built_code = lambda **kwargs: wrapper(func=plugin_name, **kwargs)
     return built_code
 
 
-# Wrapper for a custom diagnostic to allow injecting any default behaviour
-# func should be a custom plugin that returns a list of functions to run
-def wrapper(func: Callable[..., List[Plugin]], **kwargs) -> List[Plugin]:
+# Wrapper for a custom plugin to allow injecting any default behaviour
+# func should be a custom plugin that returns a function to run
+def wrapper(func: Plugin, **kwargs) -> Tuple[int, Any]:
     if func is None:
         raise NotImplementedError("No default behaviour implemented, a function must be supplied")
+    print(f"Calling custom plugin function {func}")
     return func(**kwargs)
