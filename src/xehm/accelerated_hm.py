@@ -22,7 +22,8 @@ from .graphics import plot_1d_nroy, plot_emulator_for_wave, plot_emulator_design
 from .graphics import HGraph, plot_2d_samples
 from ._sample import SISOSampleSet
 from ._variables import Variable, make_variable_set
-from .utils import implausibility, print_separator_line, print_header
+from .utils import build_custom_plugin, implausibility, print_separator_line, print_header, ReturnState
+from ._exceptions import SimulationFailure
 from typing import Union, List
 from sklearn.cluster import KMeans
 import numpy as np
@@ -33,8 +34,19 @@ __all__ = ["HistoryMatching1D", "HistoryMatching2D"]
 class HMBase:
     def __init__(self, emulator_budget: int = 1000, input_dimensions: int = 1, simulator_budget: int = 10,
                  emulator_model: Emulator = GaussianProcess, design_process=default_designer,
-                 diagnostics=leave_one_out):
-        self._sim_function = None
+                 diagnostics=leave_one_out, simulator_function=None):
+
+        # Simulator component - required
+        self._sim_function = simulator_function
+        if simulator_function is not None:
+            self._sim_function = build_custom_plugin(simulator_function)
+
+        # Input designer
+        self._designer = build_custom_plugin(design_process)
+
+        # Diagnostics
+        self._diagnostic = build_custom_plugin(diagnostics)
+
         self._emulator_budget = emulator_budget
         self._simulator_budget = simulator_budget
         self._n_input_dims = input_dimensions
@@ -44,8 +56,6 @@ class HMBase:
 
         # Analysis components
         self._emulator_model = emulator_model
-        self._designer = design_process
-        self._diagnostic = diagnostics()[0]
 
         # Performance stats
         self._n_sim_calls = 0
@@ -58,7 +68,7 @@ class HMBase:
         self.i = None
 
     def set_simulator(self, simulator):
-        self._sim_function = simulator
+        self._sim_function = build_custom_plugin(simulator)
 
     def set_budgets(self, sim_max: int, em_max: int):
         self._simulator_budget = sim_max
@@ -72,9 +82,11 @@ class HMBase:
         if self._sim_function is None:
             raise ValueError("No simulator defined for this history matching process")
 
-        result = self._sim_function(x)
-        self._n_sim_calls += len(x)
-        return result
+        result, data = self._sim_function(x=x)
+        if result != ReturnState.ok:
+            print(f"Simulator failed: {result}")
+            raise SimulationFailure("Simulator unable to produce suitable outout")
+        return data
 
     def print_performance(self):
         print_header("History matching performance summary")
@@ -147,53 +159,45 @@ class HistoryMatching1D(HMBase):
     #   - If the simulator has not been defined / attached then this will fail
     #
     def initialise(self, n_points: Union[int, None] = None):
+        initialise_wave_zero(self, n_points)
 
-        print_header("Initialising a new history matching process")
-
-        # If n_points is specified then update the simulator budget
-        if n_points is not None:
-            print(f"Setting simulator budget to {n_points}")
-            self._simulator_budget = n_points
-        else:
-            print(f"Using previous simulator budget of {self._simulator_budget}")
-
-        # Create the initial design points using the simulator
-        # The budget is passed to the designer to limit the number of simulator evaluations
-        initial_design = self._designer(self._variable, self._simulator_budget)
-        initial_runs = self.call_simulator(initial_design)
-        print(f"Constructed a design of {initial_design.shape[0]} points")
-
-        # Build and validate the emulator
-        emulator = self._emulator_model()
-        print(f"Constructed an emulator of type {emulator.ident}")
-        valid = self._diagnostic(emulator, initial_design, initial_runs)
-        if not valid:
-            print(f"Emulator failed diagnostics in initial wave")
-            # What do we do here?
-        emulator.train(initial_design, initial_runs)
-        print("Emulator has passed diagnostics")
-        emulator.ident = "wave0_em0"
-        self._n_emulators_built += 1
-
-        # Generate emulation samples
-        emulator_x = self._designer(self._variable, self._emulator_budget)
-        means, variances = emulator.evaluate(emulator_x)
-        self._n_emulator_calls += len(emulator_x)
-        emulator_i = implausibility(self._target_mean, means, self._target_variance, variances)
-        print(f"Constructed implausibility set containing {self._emulator_budget} points")
-
-        # Don't select out final samples to allow full space plotting
-        self._samples = np.zeros((self._emulator_budget, 5))
-        self._samples[:, 0] = emulator_x[:, 0]
-        self._samples[:, 1] = means[:, 0]
-        self._samples[:, 2] = variances[:, 0]
-        self._samples[:, 3] = emulator_i[:, 0]
-        self._samples[:, 4] = np.zeros(self._emulator_budget)
-        self._emulators = [emulator]
-        self._levels = [0]
-        self._splits = []
-        self._clusters = [None]
-        self._num_waves = 0
+    #        # Create the initial design points using the simulator
+    #        # The budget is passed to the designer to limit the number of simulator evaluations
+    #        initial_design = self._designer(variables=self._variable, points=self._simulator_budget)
+    #        initial_runs = self.call_simulator(initial_design)
+    #        print(f"Constructed a design of {initial_design.shape[0]} points")
+    #
+    #        # Build and validate the emulator
+    #        emulator = self._emulator_model()
+    #        print(f"Constructed an emulator of type {emulator.ident}")
+    #        valid = self._diagnostic(emulator, initial_design, initial_runs)
+    #        if not valid:
+    #            print(f"Emulator failed diagnostics in initial wave")
+    #            # What do we do here?
+    #        emulator.train(initial_design, initial_runs)
+    #        print("Emulator has passed diagnostics")
+    #        emulator.ident = "wave0_em0"
+    #        self._n_emulators_built += 1
+    #
+    #        # Generate emulation samples
+    #        emulator_x = self._designer(self._variable, self._emulator_budget)
+    #        means, variances = emulator.evaluate(emulator_x)
+    #        self._n_emulator_calls += len(emulator_x)
+    #        emulator_i = implausibility(self._target_mean, means, self._target_variance, variances)
+    #        print(f"Constructed implausibility set containing {self._emulator_budget} points")
+    #
+    #        # Don't select out final samples to allow full space plotting
+    #        self._samples = np.zeros((self._emulator_budget, 5))
+    #        self._samples[:, 0] = emulator_x[:, 0]
+    #        self._samples[:, 1] = means[:, 0]
+    #        self._samples[:, 2] = variances[:, 0]
+    #        self._samples[:, 3] = emulator_i[:, 0]
+    #        self._samples[:, 4] = np.zeros(self._emulator_budget)
+    #        self._emulators = [emulator]
+    #        self._levels = [0]
+    #        self._splits = []
+    #        self._clusters = [None]
+    #        self._num_waves = 0
 
     def run_wave(self, i_cut_off=3.0):
 
@@ -413,6 +417,10 @@ class HistoryMatching2D(HMBase):
             print(f"Cluster {i + 1} centroid: {','.join([str(k) for k in c])}")
         self._clusters.append(clusters)
 
+        from hdbscan import HDBSCAN as hd
+        h = hd().fit(X=locations)
+        print(f"HDBSCAN: {max(h.labels_)}")
+
         # Build emulators for each cluster
         for c in range(cl.n_groups):
             print_separator_line()
@@ -421,7 +429,7 @@ class HistoryMatching2D(HMBase):
             print(f"Found {samples_in_region.shape[0]} out of {locations.shape[0]} in this region")
             cl_samples = default_selector(locations[clusters.labels_ == c], self._simulator_budget)
             print(f"Selected {cl_samples.shape[0]} to build training sample")
-            cl_runs = self._sim_function(cl_samples)
+            cl_runs = self.call_simulator(cl_samples)
 
             emulator = self._emulator_model()
             print(f"Constructed an emulator of type {emulator.ident}")
@@ -440,7 +448,6 @@ class HistoryMatching2D(HMBase):
 
         # Generate new samples for the next iteration
         self.x, self.m, self.v, self.i, self.c = cascade_rejection_sampler(self, self._emulator_budget, 2)
-
 
     def plot_current(self, resolution: Union[int, None] = None, i_cut_off=3.0):
         if self._samples is None:
@@ -507,7 +514,6 @@ class HistoryMatching2D(HMBase):
 #   - If the simulator has not been defined / attached then this will fail
 #
 def initialise_wave_zero(match_job, n_points: Union[int, None] = None):
-    
     print_header("Initialising a new history matching process")
 
     # If n_points is specified then update the simulator budget
@@ -523,25 +529,27 @@ def initialise_wave_zero(match_job, n_points: Union[int, None] = None):
 
     # Create the initial design points using the simulator
     # The budget is passed to the designer to limit the number of simulator evaluations
-    initial_design = match_job._designer(match_job._variable, match_job._simulator_budget)
-    initial_runs = match_job._sim_function(initial_design)
+    initial_design = match_job._designer(variables=match_job._variable, points=match_job._simulator_budget)
+    initial_runs = match_job.call_simulator(initial_design)
     print(f"Constructed a design of {initial_design.shape[0]} points")
 
     # Build and validate the emulator
     emulator = match_job._emulator_model()
     print(f"Constructed an emulator of type {emulator.ident}")
     valid = match_job._diagnostic(emulator_model=emulator, reference_inputs=initial_design,
-                                  reference_outputs=initial_runs, debug_print=True, **match_job.diagnostic_settings)
+                                  reference_outputs=initial_runs, debug_print=True)
     if not valid:
         print(f"Emulator failed diagnostics in initial wave")
         # What do we do here?
     emulator.train(initial_design, initial_runs)
     print("Emulator has passed diagnostics")
     emulator.ident = "wave0_em0"
+    match_job._n_emulators_built += 1
 
     # Generate emulation samples
-    emulator_x = match_job._designer(match_job._variable, match_job._emulator_budget)
+    emulator_x = match_job._designer(variables=match_job._variable, points=match_job._emulator_budget)
     means, variances = emulator.evaluate(emulator_x)
+    match_job._n_emulator_calls += len(emulator_x)
     emulator_i = implausibility(match_job._target_mean, means, match_job._target_variance, variances)
     print(f"Constructed implausibility set containing {match_job._emulator_budget} points")
 
@@ -569,7 +577,7 @@ def cascade_rejection_sampler(match_job, budget: int, dimensions: int = 1) -> \
         raise ValueError("History matching not initialised")
 
     # Resample from initial setup
-    start_x = match_job._designer(match_job._variable, budget)
+    start_x = match_job._designer(variables=match_job._variable, points=budget)
     start_m, start_v = match_job._emulators[0].evaluate(start_x)
     match_job._n_emulator_calls += start_x.shape[0]
     start_i = implausibility(match_job._target_mean, start_m, match_job._target_variance, start_v)

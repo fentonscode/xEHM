@@ -5,9 +5,10 @@ from xehm._distributions import Tree2D
 
 dist = Tree2D()
 
+
 # Simulator: This is the forward model which is to undergo calibration / analysis
-def simulator(x) -> np.ndarray:
-    return dist.probability(x)
+def simulator(x) -> (int, np.ndarray):
+    return hm.utils.plugin.ReturnState.ok, dist.probability(x)
 
 
 def main():
@@ -24,8 +25,8 @@ def main():
     hmatch.initialise()
     hmatch.plot_samples()
 
-    # Do 5 waves
-    for w in range(10):
+    # Do 3 waves
+    for w in range(3):
 
         hmatch.run_wave()
         hmatch.plot_samples()

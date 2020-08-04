@@ -1,18 +1,18 @@
 import xehm
+import numpy as np
 
 
 def main():
 
-    emulator_form = xehm.emulators.GaussianProcess()
-    emulator_diag = xehm.diagnostics.leave_one_out()[0]
-
-    user_diagnostic = xehm.utils.build_custom_plugin("plugin_diagnostic::diagnostic_none")
-    setup_parameters = {"debug_print": True}
-    diagnostic_functions = user_diagnostic(setup_parameters)
-
-    diagnostic_parameters = {}
-    for f in diagnostic_functions:
-        result = f(diagnostic_parameters)
+    user_diagnostic = xehm.utils.build_custom_plugin("plugin_diagnostic::cosine_diagnostic")
+    extra_parameters = {"debug_print": True}
+    a = np.random.uniform(0.0, 1.0, size=5)
+    b = np.random.uniform(0.0, 1.0, size=5)
+    result, score = user_diagnostic(set_a=a, set_b=b, **extra_parameters)
+    if result != xehm.utils.ReturnState.ok:
+        print("The diagnostic failed")
+    else:
+        print(f"Dignostic score: {score}")
 
 
 if __name__ == '__main__':

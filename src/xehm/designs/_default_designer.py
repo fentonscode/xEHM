@@ -23,12 +23,12 @@ class DefaultDesigner(Designer):
 #
 # The default designer calls randomly from the support of each input variable
 #
-def default_designer(v_list: Union[Variable, Tuple[Variable]], n_points: int):
-    if not isinstance(v_list, tuple):
-        return uniform_box(np.asarray([[v_list.min_support], [v_list.max_support]]), n_points)
-    mins = [var.min_support for var in v_list]
-    maxs = [var.max_support for var in v_list]
-    return uniform_box(np.asarray([mins, maxs]), n_points)
+def default_designer(variables: Union[Variable, Tuple[Variable]], points: int):
+    if not isinstance(variables, tuple):
+        return uniform_box(np.asarray([[variables.min_support], [variables.max_support]]), points)
+    mins = [var.min_support for var in variables]
+    maxs = [var.max_support for var in variables]
+    return uniform_box(np.asarray([mins, maxs]), points)
 
 
 def default_selector(s_list: np.ndarray, n_points: int):

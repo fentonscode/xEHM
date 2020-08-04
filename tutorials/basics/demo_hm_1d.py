@@ -3,8 +3,9 @@ import numpy as np
 
 
 # Simulator: This is the forward model which is to undergo calibration / analysis
-def simulator(x) -> np.ndarray:
-    return np.add(x, np.cos(np.multiply(10.0, x)))
+def simulator(x) -> (int, np.ndarray):
+    y = np.add(x, np.cos(np.multiply(10.0, x)))
+    return hm.utils.plugin.ReturnState.ok, y
 
 
 def main():

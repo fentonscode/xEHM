@@ -1,7 +1,7 @@
 import numpy as np
-from scipy.stats import multivariate_normal
+from scipy.stats import bernoulli, gamma, multivariate_normal
 
-__all__ = ["Distribution", "Tree2D", "Proposal", "UniformStepProposal"]
+__all__ = ["Distribution", "Tree2D", "Proposal", "UniformStepProposal", "BernoulliGamma"]
 
 
 # Distributions define the implausibility functions that are used to power IDEMC
@@ -162,8 +162,64 @@ class Tree2D(Distribution):
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.25, 0.75, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.75, 0.25, 0.0))
         p += np.multiply(0.25, self.__bivariate_normal(x1, x2, 0.0515, 0.0515, 0.75, 0.75, 0.0))
+        if len(p) == 0:
+            return np.empty((0, 2))
         return np.where(np.apply_along_axis(in_box, 1, a), p, 0.0).reshape(-1, 1)
 
+
+# Combined Bernoulli-Gamma distribution: A Gamma model that handles zeros
+# This is currently only 1D and only accepts integers
+#
+# NOTES:
+#   - The gamma tail is not truncated and extends to infinity
+#
+class BernoulliGamma(Distribution):
+    def __init__(self):
+        super().__init__(1, np.asarray([0, np.inf]).reshape(1, 2))
+        self.p_zero = 0.0
+        self.g_alpha = 0.0
+        self.g_theta = 0.0
+
+    def probability(self, x):
+        return np.where(x == 0, 1.0 - self.p_zero, gamma.pdf(x, a=self.g_alpha, scale=self.g_theta) * self.p_zero)
+
+    def set_params(self, params):
+        self.p_zero = params[0]
+        self.g_alpha = params[1]
+        self.g_theta = params[2]
+        return self
+
+    def sample(self, n_samples: int):
+        y1 = np.random.binomial(n=1, p=self.p_zero, size=(n_samples, 1))
+        y2 = np.random.gamma(shape=self.g_alpha, scale=self.g_theta, size=(n_samples, 1))
+        return y1 * y2
+
+    def sample_ints(self, n_samples: int):
+        return np.round(self.sample(n_samples))
+
+    def expectation(self):
+        b_mean = self.p_zero
+        g_mean = self.g_alpha * self.g_theta
+
+        # We assume that the Bernoulli and Gamma components are independent
+        return b_mean * g_mean
+
+    def variance(self):
+        b_mean = self.p_zero
+        g_mean = self.g_alpha * self.g_theta
+        b_var = self.p_zero * (1.0 - self.p_zero)
+        g_var = self.g_alpha * (self.g_theta ** 2)
+
+        # We assume that the Bernoulli and Gamma components are independent
+        return ((b_mean ** 2) * g_var) + ((g_mean ** 2) * b_var) + (b_var * g_var)
+
+    def confidence_bound(self, sigmas: float = 2.0):
+        delta = sigmas * np.sqrt(self.variance())
+        return self.expectation() - delta, self.expectation() + delta
+
+    def cdf_ints(self, x: int):
+        probs = self.probability(np.arange(x + 1))
+        return sum(probs)
 
 # Uniform distribution: used as a default proposal
 # This is generalised for n-dimensions and n support limits (one per dimension)

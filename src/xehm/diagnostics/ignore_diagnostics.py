@@ -1,15 +1,11 @@
-from ..utils import Plugin, print_kwargs
-from typing import List
+from ..utils.plugin import ReturnState
+from ..utils import print_kwargs
 
 __all__ = ["ignore_diagnostics"]
 
 
-def ignore_diagnostics(**kwargs) -> List[Plugin]:
-    return [null_function]
-
-
 # ignore_diagnostics - simply returns true to pass straight through the diagnostic stage
-def null_function(**kwargs) -> bool:
+def ignore_diagnostics(**kwargs) -> (int, bool):
     if "debug_print" in kwargs and kwargs["debug_print"]:
         print_kwargs(**kwargs)
-    return True
+    return ReturnState.ok, True
